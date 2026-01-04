@@ -13,6 +13,10 @@
     <version>0.0.1-SNAPSHOT</version>
     <name>java-ai-helper</name>
     <description>java-ai-helper</description>
+    <modules>
+        <module>handle-code</module>
+    </modules>
+    <packaging>pom</packaging>
     <url/>
 
     <properties>

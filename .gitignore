@@ -33,6 +33,6 @@ build/
 .vscode/
 
 **/*.yml
-!example.application.yml
+!handle-code/src/main/resources/example.application.yml
 
-.claude
+CLAUDE.md
