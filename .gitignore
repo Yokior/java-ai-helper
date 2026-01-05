@@ -36,3 +36,5 @@ build/
 !handle-code/src/main/resources/example.application.yml
 
 CLAUDE.md
+开发用/
+**/*.zip
