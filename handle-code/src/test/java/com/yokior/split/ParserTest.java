@@ -1,4 +1,4 @@
-package com.yokior;
+package com.yokior.split;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseResult;

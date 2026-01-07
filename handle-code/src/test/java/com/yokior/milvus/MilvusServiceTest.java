@@ -1,6 +1,5 @@
 package com.yokior.milvus;
 
-import com.yokior.service.milvus.IMilvusService;
 import com.yokior.utils.MilvusUtils;
 import io.milvus.grpc.SearchResults;
 import io.milvus.param.MetricType;

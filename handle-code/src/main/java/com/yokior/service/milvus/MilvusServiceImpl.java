@@ -12,7 +12,7 @@ import java.util.List;
  * @date 2026/1/7 15:04
  */
 @Service
-public class MilvusService implements IMilvusService {
+public class MilvusServiceImpl implements IMilvusService {
 
     @Autowired
     private MilvusUtils milvusUtils;

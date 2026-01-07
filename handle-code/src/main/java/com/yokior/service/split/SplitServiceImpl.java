@@ -1,110 +1,69 @@
-package com.yokior;
+package com.yokior.service.split;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.*;
-import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.DisplayName;
+import com.yokior.common.CodeFragmentType;
+import com.yokior.common.SplitChunk;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
- * Java代码切分测试类
- * 根据切分方案文档展示如何将Java类切分成不同的分片
- *
  * @author Yokior
- * @description 测试Java代码切分功能，输出每个分片的内容
- * @date 2026/1/5
+ * @description
+ * @date 2026/1/7 16:47
  */
-public class SplitTest {
+@Service
+@Slf4j
+public class SplitServiceImpl implements ISplitService {
 
-    private static final String RESOURCES_PATH = "src/test/resources";
     private JavaParser parser;
 
-    @BeforeEach
-    void setUp() {
-        parser = new JavaParser();
+    public SplitServiceImpl() {
+        this.parser = new JavaParser();
     }
 
-    @Test
-    @DisplayName("切分测试 - User类")
-    public void testSplitUserClass() throws Exception {
-        System.out.println("\n========== 切分测试: User实体类 ==========");
 
-        Path filePath = Paths.get(RESOURCES_PATH, "User.java");
-        splitAndDisplay(filePath, "User");
+
+    @Override
+    public List<SplitChunk> loadAndSplit(String filePath, String projectName) throws Exception {
+
+        return split(Paths.get(filePath), projectName);
     }
 
-    @Test
-    @DisplayName("切分测试 - TestService类")
-    public void testSplitTestServiceClass() throws Exception {
-        System.out.println("\n========== 切分测试: TestService类 ==========");
 
-        Path filePath = Paths.get(RESOURCES_PATH, "TestService.java");
-        splitAndDisplay(filePath, "TestService");
-    }
 
-    @Test
-    @DisplayName("切分测试 - IUserService接口")
-    public void testSplitUserServiceInterface() throws Exception {
-        System.out.println("\n========== 切分测试: IUserService接口 ==========");
 
-        Path filePath = Paths.get(RESOURCES_PATH, "IUserService.java");
-        splitAndDisplay(filePath, "IUserService");
-    }
 
-    @Test
-    @DisplayName("切分测试 - AbstractBaseService抽象类")
-    public void testSplitAbstractBaseService() throws Exception {
-        System.out.println("\n========== 切分测试: AbstractBaseService抽象类 ==========");
+    private List<SplitChunk> split(Path filePath, String projectName) throws Exception {
 
-        Path filePath = Paths.get(RESOURCES_PATH, "AbstractBaseService.java");
-        splitAndDisplay(filePath, "AbstractBaseService");
-    }
+//        // 从path中获取文件名去除.java作为类名
+//        String className = filePath.getFileName().toString().replace(".java", "");
 
-    @Test
-    @DisplayName("切分测试 - UserStatus枚举类")
-    public void testSplitUserStatusEnum() throws Exception {
-        System.out.println("\n========== 切分测试: UserStatus枚举类 ==========");
+        // 去除路径前面的临时文件夹和项目名 site
+        String tempDir = System.getProperty("java.io.tmpdir");
+        String site = filePath.toString().substring(tempDir.length() + projectName.length() + 1);
+        log.info("site: " + site);
 
-        Path filePath = Paths.get(RESOURCES_PATH, "UserStatus.java");
-        splitAndDisplay(filePath, "UserStatus");
-    }
-
-    @Test
-    @DisplayName("切分测试 - UserRepository仓储接口")
-    public void testSplitUserRepository() throws Exception {
-        System.out.println("\n========== 切分测试: UserRepository仓储接口 ==========");
-
-        Path filePath = Paths.get(RESOURCES_PATH, "UserRepository.java");
-        splitAndDisplay(filePath, "UserRepository");
-    }
-
-    /**
-     * 解析并切分Java文件，显示每个分片的内容
-     */
-    private void splitAndDisplay(Path filePath, String className) throws Exception {
         File file = filePath.toFile();
         if (!file.exists()) {
-            System.err.println("文件不存在: " + filePath);
-            return;
+            throw new Exception("文件不存在");
         }
 
         try (FileInputStream in = new FileInputStream(file)) {
             ParseResult<CompilationUnit> parseResult = parser.parse(in);
 
             if (!parseResult.isSuccessful()) {
-                System.err.println("解析失败: " + parseResult.getProblems());
-                return;
+                throw new Exception("代码解析失败：" + parseResult.getProblems());
             }
 
             CompilationUnit cu = parseResult.getResult().orElse(null);
@@ -116,50 +75,78 @@ public class SplitTest {
                 List<CodeFragment> fragments = splitter.split(cu);
 
                 // 输出每个分片的内容
-                System.out.println("\n" + className + " 类共切分成 " + fragments.size() + " 个分片:");
-                System.out.println("=".repeat(80));
+//                log.info(className + " 类共切分成 " + fragments.size() + " 个分片:");
+
+                List<SplitChunk> chunkList = new ArrayList<>();
 
                 for (int i = 0; i < fragments.size(); i++) {
                     CodeFragment fragment = fragments.get(i);
-                    System.out.println("\n【分片 " + (i + 1) + "】");
-                    System.out.println("类型: " + fragment.getType());
-                    System.out.println("标识: " + fragment.getTag());
-                    System.out.println("-".repeat(60));
-                    System.out.println(fragment.getContent());
-                    System.out.println("-".repeat(60));
+
+                    SplitChunk chunk = SplitChunk.builder()
+                            .projectName(projectName)
+                            .type(fragment.getType().getCode())
+                            .className(fragment.getClassName())
+                            .methodName(fragment.getMethodName())
+                            .site(site)
+                            .content(splitter.compressCode(fragment.getContent()))
+                            .build();
+
+                    chunkList.add(chunk);
+
+//                    System.out.println("\n【分片 " + (i + 1) + "】");
+//                    System.out.println("类型: " + fragment.getType());
+//                    System.out.println("标识: " + fragment.getDisplayTag());
+//                    System.out.println("方法名: " + fragment.getMethodName());
+//                    System.out.println("-".repeat(60));
+//                    System.out.println(fragment.getContent());
+//                    System.out.println(splitter.compressCode(fragment.getContent()));
+//                    System.out.println("-".repeat(60));
                 }
+
+                return chunkList;
             }
         }
+
+        return new ArrayList<>();
     }
 
-    /**
-     * 代码分片类
-     */
-    private static class CodeFragment {
-        private String type;      // 分片类型：CLASS_META, CLASS_STRUCTURE, MEMBER_DETAIL等
-        private String tag;       // 分片标签：[CLASS_META], [METHOD_DETAIL]等
-        private String content;   // 分片内容
-        private String className; // 所属类名
-        private String memberName; // 成员名称（可选）
 
-        public CodeFragment(String type, String tag, String content, String className) {
+    private static class CodeFragment {
+        private CodeFragmentType type; // 分片类型：使用枚举
+        private String content;        // 分片内容
+        private String className;      // 所属类名
+        private String memberName;     // 成员名称（可选）
+        private String methodName;     // 方法名（如果不是方法片段可以置空）
+
+        public CodeFragment(CodeFragmentType type, String content, String className) {
             this.type = type;
-            this.tag = tag;
             this.content = content;
             this.className = className;
         }
 
-        public CodeFragment(String type, String tag, String content, String className, String memberName) {
-            this(type, tag, content, className);
+        public CodeFragment(CodeFragmentType type, String content, String className, String memberName) {
+            this(type, content, className);
             this.memberName = memberName;
         }
 
+        public CodeFragment(CodeFragmentType type, String content, String className, String memberName, String methodName) {
+            this(type, content, className, memberName);
+            this.methodName = methodName;
+        }
+
         // Getters
-        public String getType() { return type; }
-        public String getTag() { return tag; }
+        public CodeFragmentType getType() { return type; }
         public String getContent() { return content; }
         public String getClassName() { return className; }
         public String getMemberName() { return memberName; }
+        public String getMethodName() { return methodName; }
+
+        /**
+         * 获取带方括号的类型标识，用于显示
+         */
+        public String getDisplayTag() {
+            return "[" + type.getCode() + "]";
+        }
     }
 
     /**
@@ -223,7 +210,7 @@ public class SplitTest {
             // 分片1：类概览信息 [CLASS_OVERVIEW]
             // 包含：类定义行 + 类注解 + 类注释 + 类属性（含注解） + 所有方法定义行
             String classOverviewContent = buildClassOverviewContent(n);
-            fragments.add(new CodeFragment("CLASS_OVERVIEW", "[CLASS_OVERVIEW]", classOverviewContent, currentClassName));
+            fragments.add(new CodeFragment(CodeFragmentType.CLASS_OVERVIEW, classOverviewContent, currentClassName, null, null));
 
             // 分片2-N：方法详情 [METHOD_DETAIL]
             // 只有语义重要的方法才单独切分
@@ -232,7 +219,7 @@ public class SplitTest {
                     .toList();
             for (MethodDeclaration method : importantMethods) {
                 String methodContent = buildMethodDetailContent(method);
-                fragments.add(new CodeFragment("METHOD_DETAIL", "[METHOD_DETAIL]", methodContent, currentClassName, method.getNameAsString()));
+                fragments.add(new CodeFragment(CodeFragmentType.METHOD_DETAIL, methodContent, currentClassName, method.getNameAsString(), method.getNameAsString()));
             }
         }
 
@@ -242,7 +229,7 @@ public class SplitTest {
         private void splitInterface(ClassOrInterfaceDeclaration n) {
             // 分片1：完整的接口定义（包含契约和方法签名）
             String interfaceDefinitionContent = buildInterfaceDefinitionContent(n);
-            fragments.add(new CodeFragment("INTERFACE_DEFINITION", "[INTERFACE_DEFINITION]", interfaceDefinitionContent, currentClassName));
+            fragments.add(new CodeFragment(CodeFragmentType.INTERFACE_DEFINITION, interfaceDefinitionContent, currentClassName, null, null));
 
             // 分片2-N：默认方法实现
             List<MethodDeclaration> defaultMethods = n.getMethods().stream()
@@ -250,7 +237,7 @@ public class SplitTest {
                     .toList();
             for (MethodDeclaration method : defaultMethods) {
                 String methodContent = buildMethodDetailContent(method);
-                fragments.add(new CodeFragment("DEFAULT_METHOD", "[DEFAULT_METHOD]", methodContent, currentClassName, method.getNameAsString()));
+                fragments.add(new CodeFragment(CodeFragmentType.DEFAULT_METHOD, methodContent, currentClassName, method.getNameAsString(), method.getNameAsString()));
             }
 
             // 分片3-N：静态方法
@@ -259,7 +246,7 @@ public class SplitTest {
                     .toList();
             for (MethodDeclaration method : staticMethods) {
                 String methodContent = buildMethodDetailContent(method);
-                fragments.add(new CodeFragment("STATIC_METHOD", "[STATIC_METHOD]", methodContent, currentClassName, method.getNameAsString()));
+                fragments.add(new CodeFragment(CodeFragmentType.STATIC_METHOD, methodContent, currentClassName, method.getNameAsString(), method.getNameAsString()));
             }
         }
 
@@ -269,11 +256,11 @@ public class SplitTest {
         private void splitAbstractClass(ClassOrInterfaceDeclaration n) {
             // 分片1：抽象类定义
             String abstractClassContent = buildAbstractClassContent(n);
-            fragments.add(new CodeFragment("ABSTRACT_CLASS_META", "[ABSTRACT_CLASS_META]", abstractClassContent, currentClassName));
+            fragments.add(new CodeFragment(CodeFragmentType.ABSTRACT_CLASS_META, abstractClassContent, currentClassName, null, null));
 
             // 分片2：具体实现部分
             String concreteMembersContent = buildConcreteMembersContent(n);
-            fragments.add(new CodeFragment("CONCRETE_MEMBERS", "[CONCRETE_MEMBERS]", concreteMembersContent, currentClassName));
+            fragments.add(new CodeFragment(CodeFragmentType.CONCRETE_MEMBERS, concreteMembersContent, currentClassName, null, null));
 
             // 分片3-N：抽象方法详情
             List<MethodDeclaration> abstractMethods = n.getMethods().stream()
@@ -281,7 +268,7 @@ public class SplitTest {
                     .toList();
             for (MethodDeclaration method : abstractMethods) {
                 String methodContent = buildAbstractMethodContent(method);
-                fragments.add(new CodeFragment("ABSTRACT_METHOD_DETAIL", "[ABSTRACT_METHOD_DETAIL]", methodContent, currentClassName, method.getNameAsString()));
+                fragments.add(new CodeFragment(CodeFragmentType.ABSTRACT_METHOD_DETAIL, methodContent, currentClassName, method.getNameAsString(), method.getNameAsString()));
             }
         }
 
@@ -291,16 +278,16 @@ public class SplitTest {
         private void splitEnum(EnumDeclaration n) {
             // 分片1：枚举定义
             String enumDefinitionContent = buildEnumDefinitionContent(n);
-            fragments.add(new CodeFragment("ENUM_DEFINITION", "[ENUM_DEFINITION]", enumDefinitionContent, currentClassName));
+            fragments.add(new CodeFragment(CodeFragmentType.ENUM_DEFINITION, enumDefinitionContent, currentClassName, null, null));
 
             // 分片2：属性和方法
             String enumMembersContent = buildEnumMembersContent(n);
-            fragments.add(new CodeFragment("ENUM_MEMBERS", "[ENUM_MEMBERS]", enumMembersContent, currentClassName));
+            fragments.add(new CodeFragment(CodeFragmentType.ENUM_MEMBERS, enumMembersContent, currentClassName, null, null));
 
             // 分片3-N：枚举常量详情
             for (EnumConstantDeclaration constant : n.getEntries()) {
                 String constantContent = buildEnumConstantContent(constant);
-                fragments.add(new CodeFragment("ENUM_CONSTANT_DETAIL", "[ENUM_CONSTANT_DETAIL]", constantContent, currentClassName, constant.getNameAsString()));
+                fragments.add(new CodeFragment(CodeFragmentType.ENUM_CONSTANT_DETAIL, constantContent, currentClassName, constant.getNameAsString(), null));
             }
         }
 
@@ -343,7 +330,7 @@ public class SplitTest {
             if (!n.getAnnotations().isEmpty()) {
                 content.append("\n类注解:\n");
                 n.getAnnotations().forEach(annotation ->
-                    content.append("  ").append(annotation).append("\n"));
+                        content.append("  ").append(annotation).append("\n"));
             }
 
             // 类注释
@@ -363,7 +350,7 @@ public class SplitTest {
                     // 字段注解
                     if (!field.getAnnotations().isEmpty()) {
                         field.getAnnotations().forEach(annotation ->
-                            content.append("  ").append(annotation).append("\n"));
+                                content.append("  ").append(annotation).append("\n"));
                     }
                     // 字段定义
                     content.append("  ").append(field).append("\n");
@@ -381,13 +368,6 @@ public class SplitTest {
                 });
             }
 
-            // 显示被过滤的方法数量
-            long filteredMethodCount = n.getMethods().stream()
-                    .filter(m -> !isMethodSemanticallyImportant(m))
-                    .count();
-            if (filteredMethodCount > 0) {
-                content.append("\n// 已过滤 ").append(filteredMethodCount).append(" 个辅助方法（getter/setter等）\n");
-            }
 
             // 构造函数通常不需要单独显示在概览中，因为它们是标准的初始化逻辑
             // 只在有特殊注解或重要实现时才显示
@@ -427,25 +407,25 @@ public class SplitTest {
 
             // 扩展类
             n.getExtendedTypes().forEach(extType ->
-                content.append("扩展: ").append(extType).append("\n"));
+                    content.append("扩展: ").append(extType).append("\n"));
 
             // 实现接口
             if (!n.getImplementedTypes().isEmpty()) {
                 content.append("实现接口:\n");
                 n.getImplementedTypes().forEach(implType ->
-                    content.append("  ").append(implType).append("\n"));
+                        content.append("  ").append(implType).append("\n"));
             }
 
             // 注解
             if (!n.getAnnotations().isEmpty()) {
                 content.append("注解:\n");
                 n.getAnnotations().forEach(annotation ->
-                    content.append("  @").append(annotation.getName()).append("\n"));
+                        content.append("  @").append(annotation.getName()).append("\n"));
             }
 
             // JavaDoc
             n.getJavadoc().ifPresent(javadoc -> {
-                content.append("\nJavaDoc:\n");
+                content.append("\n注释:\n");
                 content.append(javadoc.getDescription().toText()).append("\n");
             });
 
@@ -464,11 +444,11 @@ public class SplitTest {
                 fields.forEach(field -> {
                     field.getVariables().forEach(variable -> {
                         content.append("  ").append(field.getModifiers())
-                               .append(" ").append(variable.getType())
-                               .append(" ").append(variable.getName()).append("\n");
+                                .append(" ").append(variable.getType())
+                                .append(" ").append(variable.getName()).append("\n");
                         // 字段注解
                         field.getAnnotations().forEach(annotation ->
-                            content.append("    @").append(annotation.getName()).append("\n"));
+                                content.append("    @").append(annotation.getName()).append("\n"));
                     });
                 });
             }
@@ -479,9 +459,9 @@ public class SplitTest {
                 content.append("\n构造函数列表:\n");
                 constructors.forEach(constructor -> {
                     content.append("  ").append(constructor.getName())
-                           .append(constructor.getParameters()).append("\n");
+                            .append(constructor.getParameters()).append("\n");
                     constructor.getAnnotations().forEach(annotation ->
-                        content.append("    @").append(annotation.getName()).append("\n"));
+                            content.append("    @").append(annotation.getName()).append("\n"));
                 });
             }
 
@@ -493,9 +473,9 @@ public class SplitTest {
                 content.append("\n重要方法签名列表:\n");
                 methods.forEach(method -> {
                     content.append("  ").append(method.getModifiers())
-                           .append(" ").append(method.getType())
-                           .append(" ").append(method.getName())
-                           .append(method.getParameters()).append("\n");
+                            .append(" ").append(method.getType())
+                            .append(" ").append(method.getName())
+                            .append(method.getParameters()).append("\n");
                 });
             }
 
@@ -505,12 +485,11 @@ public class SplitTest {
         private String buildMethodDetailContent(MethodDeclaration method) {
             StringBuilder content = new StringBuilder();
 
-            content.append("方法详情: ").append(method.getName()).append("\n");
-            content.append("签名: ").append(method.getDeclarationAsString()).append("\n");
+            content.append("方法: ").append(method.getDeclarationAsString()).append("\n");
 
             // 方法注释
             method.getJavadoc().ifPresent(javadoc -> {
-                content.append("JavaDoc:\n");
+                content.append("注释:\n");
                 content.append("  ").append(javadoc.getDescription().toText()).append("\n");
             });
 
@@ -518,7 +497,7 @@ public class SplitTest {
             if (!method.isAbstract() && method.getBody().isPresent()) {
                 content.append("方法体:\n");
                 content.append("  ").append(method.getBody().get().toString()
-                       .replace("\n", "\n  ")).append("\n");
+                        .replace("\n", "\n  ")).append("\n");
             } else if (method.isAbstract()) {
                 content.append("[抽象方法 - 无实现]\n");
             }
@@ -548,12 +527,12 @@ public class SplitTest {
             if (!n.getAnnotations().isEmpty()) {
                 content.append("注解:\n");
                 n.getAnnotations().forEach(annotation ->
-                    content.append("  ").append(annotation).append("\n"));
+                        content.append("  ").append(annotation).append("\n"));
             }
 
             // JavaDoc
             n.getJavadoc().ifPresent(javadoc -> {
-                content.append("\nJavaDoc:\n");
+                content.append("\n注释:\n");
                 content.append(javadoc.getDescription().toText()).append("\n");
             });
 
@@ -566,8 +545,8 @@ public class SplitTest {
                 constants.forEach(field -> {
                     field.getVariables().forEach(variable -> {
                         content.append("  ").append(field.getModifiers())
-                               .append(" ").append(variable.getType())
-                               .append(" ").append(variable.getName()).append("\n");
+                                .append(" ").append(variable.getType())
+                                .append(" ").append(variable.getName()).append("\n");
                     });
                 });
             }
@@ -615,7 +594,7 @@ public class SplitTest {
             if (!n.getAnnotations().isEmpty()) {
                 content.append("注解:\n");
                 n.getAnnotations().forEach(annotation ->
-                    content.append("  @").append(annotation.getName()).append("\n"));
+                        content.append("  @").append(annotation.getName()).append("\n"));
             }
 
             // 抽象方法声明列表
@@ -625,7 +604,7 @@ public class SplitTest {
             if (!abstractMethods.isEmpty()) {
                 content.append("\n抽象方法声明列表:\n");
                 abstractMethods.forEach(method ->
-                    content.append("  ").append(method.getDeclarationAsString()).append("\n"));
+                        content.append("  ").append(method.getDeclarationAsString()).append("\n"));
             }
 
             return content.toString();
@@ -641,7 +620,7 @@ public class SplitTest {
             if (!concreteFields.isEmpty()) {
                 content.append("具体属性实现:\n");
                 concreteFields.forEach(field ->
-                    content.append("  ").append(field.toString()).append("\n"));
+                        content.append("  ").append(field.toString()).append("\n"));
             }
 
             // 具体方法
@@ -651,7 +630,7 @@ public class SplitTest {
             if (!concreteMethods.isEmpty()) {
                 content.append("\n具体方法实现:\n");
                 concreteMethods.forEach(method ->
-                    content.append("  ").append(method.getName()).append("()\n"));
+                        content.append("  ").append(method.getName()).append("()\n"));
             }
 
             return content.toString();
@@ -665,7 +644,7 @@ public class SplitTest {
 
             // 方法注释
             method.getJavadoc().ifPresent(javadoc -> {
-                content.append("JavaDoc:\n");
+                content.append("注释:\n");
                 content.append("  ").append(javadoc.getDescription().toText()).append("\n");
             });
 
@@ -681,26 +660,26 @@ public class SplitTest {
             if (!n.getImplementedTypes().isEmpty()) {
                 content.append("实现接口:\n");
                 n.getImplementedTypes().forEach(type ->
-                    content.append("  ").append(type).append("\n"));
+                        content.append("  ").append(type).append("\n"));
             }
 
             // 注解
             if (!n.getAnnotations().isEmpty()) {
                 content.append("注解:\n");
                 n.getAnnotations().forEach(annotation ->
-                    content.append("  @").append(annotation.getName()).append("\n"));
+                        content.append("  @").append(annotation.getName()).append("\n"));
             }
 
             // JavaDoc
             n.getJavadoc().ifPresent(javadoc -> {
-                content.append("\nJavaDoc:\n");
+                content.append("\n注释:\n");
                 content.append(javadoc.getDescription().toText()).append("\n");
             });
 
             // 枚举常量列表
             content.append("\n枚举常量列表:\n");
             n.getEntries().forEach(entry ->
-                content.append("  ").append(entry.getName()).append("\n"));
+                    content.append("  ").append(entry.getName()).append("\n"));
 
             return content.toString();
         }
@@ -751,9 +730,9 @@ public class SplitTest {
             String body = constructor.getBody().toString();
             // 如果构造函数包含复杂逻辑，则认为重要
             return body.contains("if") || body.contains("for") ||
-                   body.contains("while") || body.contains("throw") ||
-                   body.contains("try") || body.contains("catch") ||
-                   body.length() > 100;
+                    body.contains("while") || body.contains("throw") ||
+                    body.contains("try") || body.contains("catch") ||
+                    body.length() > 100;
         }
 
         /**
@@ -780,7 +759,7 @@ public class SplitTest {
                     for (FieldDeclaration relatedField : relatedFields) {
                         relatedField.getVariables().forEach(variable -> {
                             content.append("  ").append(variable.getType())
-                                   .append(" ").append(variable.getName()).append("\n");
+                                    .append(" ").append(variable.getName()).append("\n");
                         });
                     }
                 }
@@ -804,8 +783,7 @@ public class SplitTest {
                     content.append("构造函数注释: ").append(javadoc.getDescription().toText()).append("\n");
                 });
             } else if (method != null) {
-                content.append("\n方法详情:\n");
-                content.append("签名: ").append(method.getDeclarationAsString()).append("\n");
+                content.append("方法: ").append(method.getDeclarationAsString()).append("\n");
 
                 // 方法注释
                 method.getJavadoc().ifPresent(javadoc -> {
@@ -838,6 +816,38 @@ public class SplitTest {
             return buildMemberDetailContent(clazz, null, constructor, method);
         }
 
+        /**
+         * 压缩代码，去除多余空行换行等无效字符
+         * @param code 原始代码
+         * @return 压缩后的代码
+         */
+        private String compressCode(String code) {
+            if (code == null || code.trim().isEmpty()) {
+                return code;
+            }
+
+            // 去除行首行尾空白
+            String[] lines = code.split("\n");
+            StringBuilder compressed = new StringBuilder();
+            boolean isEmptyLine = true;
+
+            for (String line : lines) {
+                String trimmedLine = line.trim();
+
+                // 非空行，去除多余空格
+                if (compressed.length() > 0 && !compressed.toString().endsWith("\n")) {
+                    compressed.append(" ");
+                }
+
+                // 压缩行内的多个空格为单个空格
+                trimmedLine = trimmedLine.replaceAll("\\s+", " ");
+                compressed.append(trimmedLine);
+                isEmptyLine = false;
+            }
+
+            return compressed.toString();
+        }
+
         // 以下是辅助方法，与ParserTest中的类似
 
         private void setCurrentClass(ClassOrInterfaceDeclaration clazz) {
@@ -863,7 +873,7 @@ public class SplitTest {
                 String propertyName = extractPropertyNameFromGetter(methodName);
                 if (fieldNames.contains(propertyName)) {
                     if (method.getJavadoc().isPresent() &&
-                        method.getJavadoc().get().getDescription().toText().length() > 20) {
+                            method.getJavadoc().get().getDescription().toText().length() > 20) {
                         return true;
                     }
                     if (hasComplexLogic(method)) {
@@ -890,9 +900,9 @@ public class SplitTest {
 
             // 过滤Object类的常见方法
             if (("toString".equals(methodName) || "hashCode".equals(methodName) ||
-                 "equals".equals(methodName) || "finalize".equals(methodName)) && paramCount <= 1) {
+                    "equals".equals(methodName) || "finalize".equals(methodName)) && paramCount <= 1) {
                 if (method.getJavadoc().isPresent() &&
-                    method.getJavadoc().get().getDescription().toText().length() > 50) {
+                        method.getJavadoc().get().getDescription().toText().length() > 50) {
                     return true;
                 }
                 if (method.getBody().isPresent()) {
@@ -957,30 +967,30 @@ public class SplitTest {
 
             String body = method.getBody().get().toString();
             return body.contains("if") || body.contains("for") ||
-                   body.contains("while") || body.contains("throw") ||
-                   body.contains("try") || body.contains("catch") ||
-                   body.contains("switch") || body.contains("case") ||
-                   body.length() > 150;
+                    body.contains("while") || body.contains("throw") ||
+                    body.contains("try") || body.contains("catch") ||
+                    body.contains("switch") || body.contains("case") ||
+                    body.length() > 150;
         }
 
         private boolean isCompatibleType(String paramType, String fieldType) {
             Map<String, String> primitiveToWrapper = Map.of(
-                "int", "Integer",
-                "long", "Long",
-                "double", "Double",
-                "float", "Float",
-                "boolean", "Boolean",
-                "char", "Character",
-                "byte", "Byte",
-                "short", "Short"
+                    "int", "Integer",
+                    "long", "Long",
+                    "double", "Double",
+                    "float", "Float",
+                    "boolean", "Boolean",
+                    "char", "Character",
+                    "byte", "Byte",
+                    "short", "Short"
             );
 
             if (primitiveToWrapper.containsKey(fieldType) &&
-                primitiveToWrapper.get(fieldType).equals(paramType)) {
+                    primitiveToWrapper.get(fieldType).equals(paramType)) {
                 return true;
             }
             if (primitiveToWrapper.containsKey(paramType) &&
-                primitiveToWrapper.get(paramType).equals(fieldType)) {
+                    primitiveToWrapper.get(paramType).equals(fieldType)) {
                 return true;
             }
 
