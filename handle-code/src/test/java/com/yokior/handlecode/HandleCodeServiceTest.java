@@ -22,4 +22,9 @@ public class HandleCodeServiceTest {
         handleCodeService.splitAndEmbedAndSave("C:\\Users\\M1891\\AppData\\Local\\Temp\\jjj");
     }
 
+    @Test
+    void testAsync() throws Exception {
+        handleCodeService.splitAndEmbedAndSaveAsync("C:\\Users\\M1891\\AppData\\Local\\Temp\\jjj");
+    }
+
 }

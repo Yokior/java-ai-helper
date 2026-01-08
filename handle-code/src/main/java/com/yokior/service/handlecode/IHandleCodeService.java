@@ -11,4 +11,6 @@ public interface IHandleCodeService {
 
     void splitAndEmbedAndSave(String projectPath) throws Exception;
 
+    void splitAndEmbedAndSaveAsync(String projectPath) throws Exception;
+
 }
