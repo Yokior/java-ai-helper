@@ -2,6 +2,7 @@ package com.yokior.service.split;
 
 import com.yokior.common.SplitChunk;
 
+import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -19,5 +20,8 @@ public interface ISplitService {
      * @return
      */
     List<SplitChunk> loadAndSplit(String filePath, String projectName) throws Exception;
+
+
+    List<SplitChunk> loadAndSplit(Path filePath, String projectName) throws Exception;
 
 }

@@ -40,8 +40,10 @@ public class SplitServiceImpl implements ISplitService {
         return split(Paths.get(filePath), projectName);
     }
 
-
-
+    @Override
+    public List<SplitChunk> loadAndSplit(Path filePath, String projectName) throws Exception {
+        return split(filePath, projectName);
+    }
 
 
     private List<SplitChunk> split(Path filePath, String projectName) throws Exception {
@@ -52,7 +54,7 @@ public class SplitServiceImpl implements ISplitService {
         // 去除路径前面的临时文件夹和项目名 site
         String tempDir = System.getProperty("java.io.tmpdir");
         String site = filePath.toString().substring(tempDir.length() + projectName.length() + 1);
-        log.info("site: " + site);
+        log.info(site);
 
         File file = filePath.toFile();
         if (!file.exists()) {

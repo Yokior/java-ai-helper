@@ -1,5 +1,7 @@
 package com.yokior.service.milvus;
 
+import com.yokior.common.SplitChunk;
+
 import java.util.List;
 
 /**
@@ -14,10 +16,14 @@ public interface IMilvusService {
      */
     void insert(List<Float> vector, String content, String type, String site, String project_name, String className, String methodName);
 
+    void insert(SplitChunk splitChunk);
+
     /**
      * 批量插入数据
      */
     void batchInsert(List<List<Float>> vectors, List<String> contents, List<String> types, List<String> sites, String project_name, List<String> classNames, List<String> methodNames);
+
+    void batchInsert(List<SplitChunk> splitChunks);
 
     
 }

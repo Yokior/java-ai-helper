@@ -18,7 +18,7 @@ public class LoadFileServiceTest {
 
     @Test
     void loadFile() {
-        String path = loadFileService.loadFile("D:\\Java_Project\\java-ai-helper\\handle-code\\src\\test\\resources\\test_project.zip");
+        String path = loadFileService.unzipAndSaveFile("D:\\Java_Project\\java-ai-helper\\handle-code\\src\\test\\resources\\test_project.zip");
         System.out.println(path);
     }
 }

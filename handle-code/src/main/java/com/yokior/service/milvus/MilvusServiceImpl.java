@@ -1,5 +1,6 @@
 package com.yokior.service.milvus;
 
+import com.yokior.common.SplitChunk;
 import com.yokior.utils.MilvusUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,7 +26,17 @@ public class MilvusServiceImpl implements IMilvusService {
     }
 
     @Override
+    public void insert(SplitChunk splitChunk) {
+        milvusUtils.insert(COLLECTION_NAME, List.of(splitChunk.getVector()), List.of(splitChunk.getContent()), List.of(splitChunk.getType()), List.of(splitChunk.getSite()), splitChunk.getProjectName(), List.of(splitChunk.getClassName()), List.of(splitChunk.getMethodName()));
+    }
+
+    @Override
     public void batchInsert(List<List<Float>> vectors, List<String> contents, List<String> types, List<String> sites, String project_name, List<String> classNames, List<String> methodNames) {
         milvusUtils.insert(COLLECTION_NAME, vectors, contents, types, sites, project_name, classNames, methodNames);
+    }
+
+    @Override
+    public void batchInsert(List<SplitChunk> splitChunks) {
+        milvusUtils.insert(COLLECTION_NAME, splitChunks.stream().map(SplitChunk::getVector).toList(), splitChunks.stream().map(SplitChunk::getContent).toList(), splitChunks.stream().map(SplitChunk::getType).toList(), splitChunks.stream().map(SplitChunk::getSite).toList(), splitChunks.get(0).getProjectName(), splitChunks.stream().map(SplitChunk::getClassName).toList(), splitChunks.stream().map(SplitChunk::getMethodName).toList());
     }
 }
