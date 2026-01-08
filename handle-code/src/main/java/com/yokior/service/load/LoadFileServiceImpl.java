@@ -20,7 +20,7 @@ public class LoadFileServiceImpl implements ILoadFileService {
     private static final String ROOT_PATH = System.getProperty("java.io.tmpdir");
 
     @Override
-    public String loadFile(String filePath) {
+    public String unzipAndSaveFile(String filePath) {
         if (filePath == null || filePath.trim().isEmpty()) {
             throw new IllegalArgumentException("文件路径不能为空");
         }

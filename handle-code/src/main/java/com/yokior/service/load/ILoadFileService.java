@@ -8,11 +8,11 @@ package com.yokior.service.load;
 public interface ILoadFileService {
 
     /**
-     * 加载文件
+     * 解压并保存文件
      *
      * @param filePath 文件路径
      * @return 加载结果
      */
-    String loadFile(String filePath);
+    String unzipAndSaveFile(String filePath);
 
 }
