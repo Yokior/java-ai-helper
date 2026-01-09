@@ -209,8 +209,85 @@ public class SplitServiceImpl implements ISplitService {
                     .filter(this::isMethodSemanticallyImportant)
                     .toList();
             for (MethodDeclaration method : importantMethods) {
-                String methodContent = buildMethodDetailContent(method);
-                fragments.add(new CodeFragment(CodeFragmentType.METHOD_DETAIL, methodContent, currentClassName, method.getNameAsString(), method.getNameAsString()));
+                // 处理方法体切分
+                addMethodFragments(method);
+            }
+        }
+
+        /**
+         * 计算包含方法头的完整内容的压缩长度
+         */
+        private int calculateCompressedLength(String methodHeader, String bodyPrefix, String bodyContent) {
+            String fullContent = methodHeader + bodyPrefix + "  " + bodyContent.replace("\n", "\n  ") + "\n";
+            return compressCode(fullContent).length();
+        }
+
+        /**
+         * 添加方法分片，处理方法体切分
+         */
+        private void addMethodFragments(MethodDeclaration method) {
+            StringBuilder methodHeader = new StringBuilder();
+            methodHeader.append("方法: ").append(method.getDeclarationAsString()).append("\n");
+
+            // 方法注释
+            method.getJavadoc().ifPresent(javadoc -> {
+                methodHeader.append("注释:\n");
+                methodHeader.append("  ").append(javadoc.getDescription().toText()).append("\n");
+            });
+
+            // 方法体
+            if (!method.isAbstract() && method.getBody().isPresent()) {
+                String methodBody = method.getBody().get().toString();
+
+                // 使用压缩长度进行判断
+                int compressedTotalLength = calculateCompressedLength(methodHeader.toString(), "方法体:\n", methodBody);
+
+                // 添加调试日志
+                log.info("方法 {} 原始长度: {}, 压缩后长度: {}",
+                        method.getName(),
+                        methodHeader.length() + "方法体:\n".length() + methodBody.replace("\n", "\n  ").length(),
+                        compressedTotalLength);
+
+                if (compressedTotalLength <= 1000) {
+                    // 不需要切分，直接添加
+                    StringBuilder content = new StringBuilder(methodHeader);
+                    content.append("方法体:\n");
+                    content.append("  ").append(methodBody.replace("\n", "\n  ")).append("\n");
+                    fragments.add(new CodeFragment(CodeFragmentType.METHOD_DETAIL, content.toString(), currentClassName, method.getNameAsString(), method.getNameAsString()));
+                } else {
+                    // 需要切分，计算每个分片的最大压缩长度
+                    // 预留方法头和"方法体(分段X):\n"的压缩长度
+                    String sampleSegmentHeader = methodHeader.toString() + "方法体(分段1):\n";
+                    int segmentHeaderCompressedLength = compressCode(sampleSegmentHeader).length();
+                    int maxCompressedBodyLength = 1000 - segmentHeaderCompressedLength - 20; // 留一些缓冲
+
+                    log.info("方法 {} 需要切分，每个分片最大压缩长度: {}", method.getName(), maxCompressedBodyLength);
+
+                    // 需要切分
+                    List<String> semanticChunks = splitMethodBodySemantically(methodBody, maxCompressedBodyLength);
+
+                    for (int i = 0; i < semanticChunks.size(); i++) {
+                        StringBuilder content = new StringBuilder(methodHeader);
+                        content.append("方法体(分段").append(i + 1).append("):\n");
+                        content.append("  ").append(semanticChunks.get(i).replace("\n", "\n  ")).append("\n");
+
+                        // 验证分片压缩长度
+                        String finalContent = content.toString();
+                        int finalCompressedLength = compressCode(finalContent).length();
+
+                        if (finalCompressedLength > 1000) {
+                            log.warn("分片 {} 压缩后长度仍超过1000字符: {}", method.getNameAsString() + "_segment" + (i + 1), finalCompressedLength);
+                        } else {
+                            log.info("分片 {} 压缩后长度: {}", method.getNameAsString() + "_segment" + (i + 1), finalCompressedLength);
+                        }
+
+                        fragments.add(new CodeFragment(CodeFragmentType.METHOD_DETAIL, finalContent, currentClassName, method.getNameAsString() + "_segment" + (i + 1), method.getNameAsString()));
+                    }
+                }
+            } else if (method.isAbstract()) {
+                StringBuilder content = new StringBuilder(methodHeader);
+                content.append("[抽象方法 - 无实现]\n");
+                fragments.add(new CodeFragment(CodeFragmentType.METHOD_DETAIL, content.toString(), currentClassName, method.getNameAsString(), method.getNameAsString()));
             }
         }
 
@@ -486,9 +563,9 @@ public class SplitServiceImpl implements ISplitService {
 
             // 方法体
             if (!method.isAbstract() && method.getBody().isPresent()) {
+                String methodBody = method.getBody().get().toString();
                 content.append("方法体:\n");
-                content.append("  ").append(method.getBody().get().toString()
-                        .replace("\n", "\n  ")).append("\n");
+                content.append("  ").append(methodBody.replace("\n", "\n  ")).append("\n");
             } else if (method.isAbstract()) {
                 content.append("[抽象方法 - 无实现]\n");
             }
@@ -503,6 +580,193 @@ public class SplitServiceImpl implements ISplitService {
             content.append(constructor.toString()).append("\n");
 
             return content.toString();
+        }
+
+        /**
+         * 语义切分方法体内容
+         * 识别代码逻辑块，如if语句、for循环、try-catch块等
+         */
+        private List<String> splitMethodBodySemantically(String methodBody, int maxCompressedLength) {
+            List<String> chunks = new ArrayList<>();
+
+            // 移除外层大括号
+            String body = methodBody.trim();
+            if (body.startsWith("{") && body.endsWith("}")) {
+                body = body.substring(1, body.length() - 1).trim();
+            }
+
+            // 按照语义块进行切分
+            List<String> semanticBlocks = identifySemanticBlocks(body);
+
+            // 组合语义块，确保每个分片压缩后不超过maxCompressedLength字符
+            StringBuilder currentChunk = new StringBuilder();
+
+            for (String block : semanticBlocks) {
+                // 计算当前块加上新块的压缩长度
+                String testContent = currentChunk.toString() + block + "\n";
+                int testCompressedLength = compressCode(testContent).length();
+
+                // 如果单个语义块本身就超过限制，需要进一步切分
+                int blockCompressedLength = compressCode(block).length();
+                if (blockCompressedLength > maxCompressedLength) {
+                    // 先保存当前分片（如果不为空）
+                    if (currentChunk.length() > 0) {
+                        chunks.add(currentChunk.toString());
+                        currentChunk = new StringBuilder();
+                    }
+                    // 对超长块进行强制切分
+                    List<String> subBlocks = forceSplitBlock(block, maxCompressedLength);
+                    chunks.addAll(subBlocks);
+                } else {
+                    // 正常情况：检查加上新块后是否超过限制
+                    if (testCompressedLength > maxCompressedLength && currentChunk.length() > 0) {
+                        chunks.add(currentChunk.toString());
+                        currentChunk = new StringBuilder();
+                    }
+                    currentChunk.append(block).append("\n");
+                }
+            }
+
+            // 添加最后一个分片
+            if (currentChunk.length() > 0) {
+                chunks.add(currentChunk.toString());
+            }
+
+            return chunks;
+        }
+
+        /**
+         * 强制切分超长块
+         */
+        private List<String> forceSplitBlock(String block, int maxCompressedLength) {
+            List<String> subBlocks = new ArrayList<>();
+            String[] lines = block.split("\n");
+            StringBuilder currentSubBlock = new StringBuilder();
+
+            for (String line : lines) {
+                // 测试添加当前行后的压缩长度
+                String testContent = currentSubBlock.toString() + line + "\n";
+                int testCompressedLength = compressCode(testContent).length();
+
+                if (testCompressedLength > maxCompressedLength && currentSubBlock.length() > 0) {
+                    subBlocks.add(currentSubBlock.toString());
+                    currentSubBlock = new StringBuilder();
+                }
+                currentSubBlock.append(line).append("\n");
+            }
+
+            if (currentSubBlock.length() > 0) {
+                subBlocks.add(currentSubBlock.toString());
+            }
+
+            return subBlocks;
+        }
+
+        /**
+         * 识别方法体中的语义块
+         */
+        private List<String> identifySemanticBlocks(String body) {
+            List<String> blocks = new ArrayList<>();
+            String[] lines = body.split("\n");
+            StringBuilder currentBlock = new StringBuilder();
+            int braceLevel = 0;
+            boolean inBlock = false;
+
+            for (int i = 0; i < lines.length; i++) {
+                String line = lines[i];
+                String trimmedLine = line.trim();
+
+                // 检查是否是语义块的开始
+                if (isStartOfSemanticBlock(trimmedLine)) {
+                    // 如果当前块不为空，先保存
+                    if (currentBlock.length() > 0) {
+                        blocks.add(currentBlock.toString());
+                        currentBlock = new StringBuilder();
+                    }
+                    inBlock = true;
+                }
+
+                currentBlock.append(line).append("\n");
+
+                // 更新大括号层级
+                braceLevel += countBraces(line);
+
+                // 如果是语义块且大括号层级回到0，表示块结束
+                if (inBlock && braceLevel == 0) {
+                    blocks.add(currentBlock.toString());
+                    currentBlock = new StringBuilder();
+                    inBlock = false;
+                }
+            }
+
+            // 添加剩余的内容
+            if (currentBlock.length() > 0) {
+                blocks.add(currentBlock.toString());
+            }
+
+            // 如果没有识别出语义块，则按行数进行简单切分
+            if (blocks.size() == 1) {
+                return splitByLines(body);
+            }
+
+            return blocks;
+        }
+
+        /**
+         * 按行数进行简单切分
+         */
+        private List<String> splitByLines(String body) {
+            List<String> blocks = new ArrayList<>();
+            String[] lines = body.split("\n");
+            StringBuilder currentBlock = new StringBuilder();
+            int lineCount = 0;
+
+            for (String line : lines) {
+                currentBlock.append(line).append("\n");
+                lineCount++;
+
+                // 每20行作为一个分片
+                if (lineCount >= 20) {
+                    blocks.add(currentBlock.toString());
+                    currentBlock = new StringBuilder();
+                    lineCount = 0;
+                }
+            }
+
+            // 添加剩余的内容
+            if (currentBlock.length() > 0) {
+                blocks.add(currentBlock.toString());
+            }
+
+            return blocks;
+        }
+
+        /**
+         * 判断是否是语义块的开始
+         */
+        private boolean isStartOfSemanticBlock(String line) {
+            return line.startsWith("if") || line.startsWith("else if") ||
+                    line.startsWith("else") || line.startsWith("for") ||
+                    line.startsWith("while") || line.startsWith("do") ||
+                    line.startsWith("try") || line.startsWith("catch") ||
+                    line.startsWith("finally") || line.startsWith("switch") ||
+                    line.startsWith("case") || line.startsWith("default") ||
+                    line.startsWith("synchronized");
+        }
+
+        /**
+         * 计算一行中的大括号数量（开括号+1，闭括号-1）
+         */
+        private int countBraces(String line) {
+            int count = 0;
+            for (char c : line.toCharArray()) {
+                if (c == '{') {
+                    count++;
+                } else if (c == '}') {
+                    count--;
+                }
+            }
+            return count;
         }
 
         /**

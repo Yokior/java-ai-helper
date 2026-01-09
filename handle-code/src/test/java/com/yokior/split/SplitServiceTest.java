@@ -23,7 +23,7 @@ public class SplitServiceTest {
 
     @Test
     void testSplitClass() throws Exception {
-        List<SplitChunk> chunkList = splitService.loadAndSplit("C:\\Users\\M1891\\AppData\\Local\\Temp\\jjj\\a\\User.java", "jjj");
+        List<SplitChunk> chunkList = splitService.loadAndSplit("C:\\Users\\M1891\\AppData\\Local\\Temp\\jjj\\User.java", "jjj");
         for (SplitChunk chunk : chunkList) {
             System.out.println(chunk);
         }
@@ -57,7 +57,7 @@ public class SplitServiceTest {
 
     @Test
     void testSplitEnum() throws Exception {
-        List<SplitChunk> chunkList = splitService.loadAndSplit("C:\\Users\\M1891\\AppData\\Local\\Temp\\jjj\\a\\UserStatus.java", "jjj");
+        List<SplitChunk> chunkList = splitService.loadAndSplit("C:\\Users\\M1891\\AppData\\Local\\Temp\\jjj\\UserStatus.java", "jjj");
         for (SplitChunk chunk : chunkList) {
             // 规整JSON格式输出
             System.out.println(JSON.toJSONString(chunk, JSONWriter.Feature.PrettyFormat));
@@ -67,7 +67,7 @@ public class SplitServiceTest {
 
     @Test
     void testSplitRepository() throws Exception {
-        List<SplitChunk> chunkList = splitService.loadAndSplit("C:\\Users\\M1891\\AppData\\Local\\Temp\\jjj\\a\\UserRepository.java", "jjj");
+        List<SplitChunk> chunkList = splitService.loadAndSplit("C:\\Users\\M1891\\AppData\\Local\\Temp\\jjj\\UserRepository.java", "jjj");
         for (SplitChunk chunk : chunkList) {
             // 规整JSON格式输出
             System.out.println(JSON.toJSONString(chunk, JSONWriter.Feature.PrettyFormat));
