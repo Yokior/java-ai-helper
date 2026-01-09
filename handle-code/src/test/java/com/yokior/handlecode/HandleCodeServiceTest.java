@@ -27,4 +27,13 @@ public class HandleCodeServiceTest {
         handleCodeService.splitAndEmbedAndSaveAsync("C:\\Users\\M1891\\AppData\\Local\\Temp\\jjj");
     }
 
+
+    /**
+     * 测试springboot-ai-qa-system
+     */
+    @Test
+    void springboot_ai_qa_systeam() throws Exception {
+        handleCodeService.splitAndEmbedAndSaveAsync("C:\\Users\\M1891\\AppData\\Local\\Temp\\springboot-ai-qa-system");
+    }
+
 }

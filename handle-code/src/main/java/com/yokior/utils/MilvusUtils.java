@@ -11,6 +11,8 @@ import io.milvus.param.dml.QueryParam;
 import io.milvus.param.dml.SearchParam;
 import io.milvus.param.index.CreateIndexParam;
 import io.milvus.param.index.DropIndexParam;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -21,6 +23,7 @@ import java.util.*;
  * @date 2026/1/7 14:41
  */
 @Component
+@Slf4j
 public class MilvusUtils {
 
     private final MilvusServiceClient milvusClient;

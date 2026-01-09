@@ -14,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -30,39 +32,34 @@ import java.util.stream.Collectors;
  * @description 测试Java代码切分功能，输出每个分片的内容
  * @date 2026/1/5
  */
+@SpringBootTest
 @Slf4j
 public class SplitTest {
 
     private static final String RESOURCES_PATH = "src/test/resources";
-    private JavaParser parser;
 
-    @BeforeEach
-    void setUp() {
-        parser = new JavaParser();
-    }
 
     @Test
-    @DisplayName("切分测试 - User类")
+    @DisplayName("切分测试")
     public void testSplitUserClass() throws Exception {
-        System.out.println("\n========== 切分测试: User实体类 ==========");
 
-        Path filePath = Paths.get("C:\\Users\\M1891\\AppData\\Local\\Temp\\jjj\\User.java");
+        Path filePath = Paths.get("C:\\Users\\M1891\\AppData\\Local\\Temp\\jjj\\ExcelUtil.java");
         List<SplitChunk> chunkList = split(filePath, "jjj");
         int i = 1;
         for (SplitChunk chunk : chunkList) {
-            log.info("\n【分片 {} 】", i++);
-            log.info("类型: {}", chunk.getType());
-            log.info("方法名: {}", chunk.getMethodName());
-            log.info("长度：{}", chunk.getContent().length());
+            log.debug("\n【分片 {} 】", i++);
+            log.debug("类型: {}", chunk.getType());
+            log.debug("方法名: {}", chunk.getMethodName());
+            log.debug("长度：{}", chunk.getContent().length());
 
             // 检查是否超过1000字符
             if (chunk.getContent().length() > 1000) {
                 log.warn("警告：分片内容超过1000字符！");
             }
 
-            log.info("-".repeat(60));
-            log.info(chunk.getContent());
-            log.info("-".repeat(60));
+            log.debug("-".repeat(60));
+            log.debug(chunk.getContent());
+            log.debug("-".repeat(60));
         }
 
     }
@@ -120,7 +117,7 @@ public class SplitTest {
         // 去除路径前面的临时文件夹和项目名 site
         String tempDir = System.getProperty("java.io.tmpdir");
         String site = filePath.toString().substring(tempDir.length() + projectName.length() + 1);
-        log.info(site);
+        log.debug(site);
 
         File file = filePath.toFile();
         if (!file.exists()) {
@@ -138,7 +135,7 @@ public class SplitTest {
                 List<CodeFragment> fragments = splitter.split(parseResult);
 
                 // 输出每个分片的内容
-//                log.info(className + " 类共切分成 " + fragments.size() + " 个分片:");
+//                log.debug(className + " 类共切分成 " + fragments.size() + " 个分片:");
 
                 List<SplitChunk> chunkList = new ArrayList<>();
 
@@ -273,7 +270,32 @@ public class SplitTest {
             // 分片1：类概览信息 [CLASS_OVERVIEW]
             // 包含：类定义行 + 类注解 + 类注释 + 类属性（含注解） + 所有方法定义行
             String classOverviewContent = buildClassOverviewContent(n);
-            fragments.add(new CodeFragment(CodeFragmentType.CLASS_OVERVIEW, classOverviewContent, currentClassName, null, null));
+
+            // 使用压缩长度进行判断
+            int compressedLength = compressCode(classOverviewContent).length();
+//            log.debug("类概览原始长度: {}, 压缩后长度: {}", classOverviewContent.length(), compressedLength);
+
+            if (compressedLength <= 1000) {
+                // 不需要切分，直接添加
+                fragments.add(new CodeFragment(CodeFragmentType.CLASS_OVERVIEW, classOverviewContent, currentClassName, null, null));
+            } else {
+                // 需要切分类概览
+                List<String> classChunks = splitClassOverviewSemantically(classOverviewContent);
+
+                log.debug("{} 类概览需要切分", currentClassName);
+
+                for (int i = 0; i < classChunks.size(); i++) {
+                    String chunkContent = classChunks.get(i);
+                    int chunkCompressedLength = compressCode(chunkContent).length();
+
+                    if (chunkCompressedLength > 1000) {
+                        log.warn("类概览分片 {} 压缩后长度仍超过1000字符: {}", i + 1, chunkCompressedLength);
+                    }
+
+                    fragments.add(new CodeFragment(CodeFragmentType.CLASS_OVERVIEW, chunkContent, currentClassName,
+                            "segment" + (i + 1), null));
+                }
+            }
 
             // 分片2-N：方法详情 [METHOD_DETAIL]
             // 只有语义重要的方法才单独切分
@@ -315,10 +337,10 @@ public class SplitTest {
                 int compressedTotalLength = calculateCompressedLength(methodHeader.toString(), "方法体:\n", methodBody);
 
                 // 添加调试日志
-                log.info("方法 {} 原始长度: {}, 压缩后长度: {}",
-                    method.getName(),
-                    methodHeader.length() + "方法体:\n".length() + methodBody.replace("\n", "\n  ").length(),
-                    compressedTotalLength);
+//                log.debug("方法 {} 原始长度: {}, 压缩后长度: {}",
+//                    method.getName(),
+//                    methodHeader.length() + "方法体:\n".length() + methodBody.replace("\n", "\n  ").length(),
+//                    compressedTotalLength);
 
                 if (compressedTotalLength <= 1000) {
                     // 不需要切分，直接添加
@@ -333,7 +355,7 @@ public class SplitTest {
                     int segmentHeaderCompressedLength = compressCode(sampleSegmentHeader).length();
                     int maxCompressedBodyLength = 1000 - segmentHeaderCompressedLength - 20; // 留一些缓冲
 
-                    log.info("方法 {} 需要切分，每个分片最大压缩长度: {}", method.getName(), maxCompressedBodyLength);
+                    log.debug("方法 {} 需要切分，每个分片最大压缩长度: {}", method.getName(), maxCompressedBodyLength);
 
                     // 需要切分
                     List<String> semanticChunks = splitMethodBodySemantically(methodBody, maxCompressedBodyLength);
@@ -349,8 +371,6 @@ public class SplitTest {
 
                         if (finalCompressedLength > 1000) {
                             log.warn("分片 {} 压缩后长度仍超过1000字符: {}", method.getNameAsString() + "_segment" + (i + 1), finalCompressedLength);
-                        } else {
-                            log.info("分片 {} 压缩后长度: {}", method.getNameAsString() + "_segment" + (i + 1), finalCompressedLength);
                         }
 
                         fragments.add(new CodeFragment(CodeFragmentType.METHOD_DETAIL, finalContent, currentClassName, method.getNameAsString() + "_segment" + (i + 1), method.getNameAsString()));
@@ -420,9 +440,11 @@ public class SplitTest {
             String enumDefinitionContent = buildEnumDefinitionContent(n);
             fragments.add(new CodeFragment(CodeFragmentType.ENUM_DEFINITION, enumDefinitionContent, currentClassName, null, null));
 
-            // 分片2：属性和方法
+            // 分片2：属性和方法 - 只有在有内容时才添加
             String enumMembersContent = buildEnumMembersContent(n);
-            fragments.add(new CodeFragment(CodeFragmentType.ENUM_MEMBERS, enumMembersContent, currentClassName, null, null));
+            if (enumMembersContent != null && !enumMembersContent.trim().isEmpty()) {
+                fragments.add(new CodeFragment(CodeFragmentType.ENUM_MEMBERS, enumMembersContent, currentClassName, null, null));
+            }
 
             // 分片3-N：枚举常量详情
             for (EnumConstantDeclaration constant : n.getEntries()) {
@@ -652,6 +674,141 @@ public class SplitTest {
             content.append(constructor.toString()).append("\n");
 
             return content.toString();
+        }
+
+        /**
+         * 语义切分类概览内容
+         * 将类概览内容按逻辑部分进行切分
+         */
+        private List<String> splitClassOverviewSemantically(String classOverviewContent) {
+            List<String> chunks = new ArrayList<>();
+
+            // 计算每个分片的最大压缩长度
+            int maxCompressedLength = 1000;
+
+            // 按照逻辑部分进行切分
+            // 1. 类定义部分
+            String[] parts = classOverviewContent.split("(?=类定义:|类注解:|类注释:|类属性:|重要方法定义:|重要构造函数定义:)");
+
+            StringBuilder currentChunk = new StringBuilder();
+
+            for (String part : parts) {
+                // 跳过空部分
+                if (part.trim().isEmpty()) {
+                    continue;
+                }
+
+                // 计算当前块加上新块的压缩长度
+                String testContent = currentChunk.toString() + part + "\n";
+                int testCompressedLength = compressCode(testContent).length();
+
+                // 如果单个部分本身就超过限制，需要进一步切分
+                int partCompressedLength = compressCode(part).length();
+                if (partCompressedLength > maxCompressedLength) {
+                    // 先保存当前分片（如果不为空）
+                    if (currentChunk.length() > 0) {
+                        chunks.add(currentChunk.toString());
+                        currentChunk = new StringBuilder();
+                    }
+                    // 对超长部分进行强制切分
+                    List<String> subParts = forceSplitClassPart(part, maxCompressedLength);
+                    chunks.addAll(subParts);
+                } else {
+                    // 正常情况：检查加上新部分后是否超过限制
+                    if (testCompressedLength > maxCompressedLength && currentChunk.length() > 0) {
+                        chunks.add(currentChunk.toString());
+                        currentChunk = new StringBuilder();
+                    }
+                    currentChunk.append(part).append("\n");
+                }
+            }
+
+            // 添加最后一个分片
+            if (currentChunk.length() > 0) {
+                chunks.add(currentChunk.toString());
+            }
+
+            return chunks;
+        }
+
+        /**
+         * 强制切分类的超长部分
+         */
+        private List<String> forceSplitClassPart(String part, int maxCompressedLength) {
+            List<String> subParts = new ArrayList<>();
+
+            // 特别处理类属性和方法定义部分
+            if (part.startsWith("类属性:")) {
+                // 按字段切分
+                String[] lines = part.split("\n");
+                StringBuilder currentSubPart = new StringBuilder();
+                currentSubPart.append("类属性:\n");
+
+                for (int i = 1; i < lines.length; i++) {
+                    String line = lines[i];
+
+                    // 测试添加当前行后的压缩长度
+                    String testContent = currentSubPart.toString() + line + "\n";
+                    int testCompressedLength = compressCode(testContent).length();
+
+                    if (testCompressedLength > maxCompressedLength && currentSubPart.length() > 10) {
+                        subParts.add(currentSubPart.toString());
+                        currentSubPart = new StringBuilder();
+                        currentSubPart.append("类属性(续):\n");
+                    }
+                    currentSubPart.append(line).append("\n");
+                }
+
+                if (currentSubPart.length() > 0) {
+                    subParts.add(currentSubPart.toString());
+                }
+            } else if (part.startsWith("重要方法定义:") || part.startsWith("重要构造函数定义:")) {
+                // 按方法切分
+                String[] lines = part.split("\n");
+                StringBuilder currentSubPart = new StringBuilder();
+                currentSubPart.append(lines[0]).append("\n"); // 保留标题行
+
+                for (int i = 1; i < lines.length; i++) {
+                    String line = lines[i];
+
+                    // 测试添加当前行后的压缩长度
+                    String testContent = currentSubPart.toString() + line + "\n";
+                    int testCompressedLength = compressCode(testContent).length();
+
+                    if (testCompressedLength > maxCompressedLength && currentSubPart.length() > 10) {
+                        subParts.add(currentSubPart.toString());
+                        currentSubPart = new StringBuilder();
+                        currentSubPart.append(part.startsWith("重要方法定义:") ? "重要方法定义(续):\n" : "重要构造函数定义(续):\n");
+                    }
+                    currentSubPart.append(line).append("\n");
+                }
+
+                if (currentSubPart.length() > 0) {
+                    subParts.add(currentSubPart.toString());
+                }
+            } else {
+                // 其他部分按行切分
+                String[] lines = part.split("\n");
+                StringBuilder currentSubPart = new StringBuilder();
+
+                for (String line : lines) {
+                    // 测试添加当前行后的压缩长度
+                    String testContent = currentSubPart.toString() + line + "\n";
+                    int testCompressedLength = compressCode(testContent).length();
+
+                    if (testCompressedLength > maxCompressedLength && currentSubPart.length() > 0) {
+                        subParts.add(currentSubPart.toString());
+                        currentSubPart = new StringBuilder();
+                    }
+                    currentSubPart.append(line).append("\n");
+                }
+
+                if (currentSubPart.length() > 0) {
+                    subParts.add(currentSubPart.toString());
+                }
+            }
+
+            return subParts;
         }
 
         /**
