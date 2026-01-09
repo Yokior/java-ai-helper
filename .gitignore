@@ -38,3 +38,4 @@ build/
 CLAUDE.md
 开发用/
 **/*.zip
+.claude/
