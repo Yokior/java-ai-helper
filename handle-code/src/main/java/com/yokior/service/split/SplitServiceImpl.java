@@ -2,6 +2,7 @@ package com.yokior.service.split;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseResult;
+import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
@@ -26,17 +27,10 @@ import java.util.*;
 @Slf4j
 public class SplitServiceImpl implements ISplitService {
 
-    private JavaParser parser;
-
-    public SplitServiceImpl() {
-        this.parser = new JavaParser();
-    }
-
 
 
     @Override
     public List<SplitChunk> loadAndSplit(String filePath, String projectName) throws Exception {
-
         return split(Paths.get(filePath), projectName);
     }
 
@@ -62,19 +56,14 @@ public class SplitServiceImpl implements ISplitService {
         }
 
         try (FileInputStream in = new FileInputStream(file)) {
-            ParseResult<CompilationUnit> parseResult = parser.parse(in);
+            CompilationUnit parseResult = StaticJavaParser.parse(in);
 
-            if (!parseResult.isSuccessful()) {
-                throw new Exception("代码解析失败：" + parseResult.getProblems());
-            }
-
-            CompilationUnit cu = parseResult.getResult().orElse(null);
-            if (cu != null) {
+            if (parseResult != null) {
                 // 创建代码切分器
                 CodeSplitter splitter = new CodeSplitter();
 
                 // 切分并收集所有分片
-                List<CodeFragment> fragments = splitter.split(cu);
+                List<CodeFragment> fragments = splitter.split(parseResult);
 
                 // 输出每个分片的内容
 //                log.info(className + " 类共切分成 " + fragments.size() + " 个分片:");
