@@ -353,8 +353,50 @@ public class MilvusUtils {
                     .annsField("vector")
                     .topK(topK)
                     .outputFields(List.of("content", "class_name", "method_name", "type", "site", "project_name"))
+                    .metricType(metricType)
                     .filter(expr)
                     .searchParams(params)
+                    .build();
+
+            return milvusClient.search(searchReq);
+        } catch (Exception e) {
+            log.error("向量搜索失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 向量搜索
+     *
+     * @param collectionName 集合名称
+     * @param vectors 搜索向量
+     * @param topK 返回结果数量
+     * @param metricType 度量类型
+     * @param expr 表达式
+     * @return 搜索结果
+     */
+    public SearchResp search(String collectionName, List<List<Float>> vectors, int topK,
+                             IndexParam.MetricType metricType, String expr) {
+        try {
+            // 将List<List<Float>>转换为List<BaseVector>
+            List<BaseVector> baseVectors = new ArrayList<>();
+            for (List<Float> vector : vectors) {
+                // 转换Float为float数组
+                float[] floatArray = new float[vector.size()];
+                for (int i = 0; i < vector.size(); i++) {
+                    floatArray[i] = vector.get(i);
+                }
+                baseVectors.add(new FloatVec(floatArray));
+            }
+
+            SearchReq searchReq = SearchReq.builder()
+                    .collectionName(collectionName)
+                    .data(baseVectors)
+                    .annsField("vector")
+                    .topK(topK)
+                    .outputFields(List.of("content", "class_name", "method_name", "type", "site", "project_name"))
+                    .metricType(metricType)
+                    .filter(expr)
                     .build();
 
             return milvusClient.search(searchReq);

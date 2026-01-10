@@ -1,8 +1,10 @@
 package com.yokior.service.milvus;
 
+import com.yokior.common.EmbedSearchResult;
 import com.yokior.common.SplitChunk;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author Yokior
@@ -25,5 +27,9 @@ public interface IMilvusService {
 
     void batchInsert(List<SplitChunk> splitChunks);
 
-    
+    List<EmbedSearchResult> search(List<Float> vector, int topK);
+
+    List<EmbedSearchResult> search(List<Float> vector, int topK, String expr);
+
+    List<EmbedSearchResult> search(List<Float> vector, int topK, String expr, Map<String, Object> params);
 }
