@@ -1,18 +1,27 @@
 package com.yokior.utils;
 
-import com.alibaba.fastjson2.JSONObject;
-import io.milvus.client.MilvusServiceClient;
-import io.milvus.grpc.*;
-import io.milvus.param.*;
-import io.milvus.param.collection.*;
-import io.milvus.param.dml.DeleteParam;
-import io.milvus.param.dml.InsertParam;
-import io.milvus.param.dml.QueryParam;
-import io.milvus.param.dml.SearchParam;
-import io.milvus.param.index.CreateIndexParam;
-import io.milvus.param.index.DropIndexParam;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import io.milvus.v2.client.MilvusClientV2;
+import io.milvus.v2.common.DataType;
+import io.milvus.v2.common.IndexParam;
+import io.milvus.v2.service.collection.request.AddFieldReq;
+import io.milvus.v2.service.collection.request.CreateCollectionReq;
+import io.milvus.v2.service.collection.request.DropCollectionReq;
+import io.milvus.v2.service.collection.request.HasCollectionReq;
+import io.milvus.v2.service.collection.request.LoadCollectionReq;
+import io.milvus.v2.service.collection.request.ReleaseCollectionReq;
+import io.milvus.v2.service.vector.request.DeleteReq;
+import io.milvus.v2.service.vector.request.InsertReq;
+import io.milvus.v2.service.vector.request.QueryReq;
+import io.milvus.v2.service.vector.request.SearchReq;
+import io.milvus.v2.service.vector.request.data.BaseVector;
+import io.milvus.v2.service.vector.request.data.FloatVec;
+import io.milvus.v2.service.vector.response.InsertResp;
+import io.milvus.v2.service.vector.response.QueryResp;
+import io.milvus.v2.service.vector.response.SearchResp;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -26,10 +35,11 @@ import java.util.*;
 @Slf4j
 public class MilvusUtils {
 
-    private final MilvusServiceClient milvusClient;
+    private final MilvusClientV2 milvusClient;
+    private final Gson gson = new Gson();
 
-    public MilvusUtils(MilvusServiceClient milvusClient) {
-        this.milvusClient = milvusClient;
+    public MilvusUtils(@Qualifier("myMilvusClient") MilvusClientV2 myMilvusClient) {
+        this.milvusClient = myMilvusClient;
     }
 
     /**
@@ -40,36 +50,79 @@ public class MilvusUtils {
      * @return 是否创建成功
      */
     public boolean createCollection(String collectionName, int dimension) {
-        FieldType fieldType1 = FieldType.newBuilder()
-                .withName("id")
-                .withDataType(DataType.Int64)
-                .withPrimaryKey(true)
-                .withAutoID(true)
-                .build();
+        try {
+            CreateCollectionReq.CollectionSchema schema = CreateCollectionReq.CollectionSchema.builder()
+                    .enableDynamicField(false)
+                    .build();
 
-        FieldType fieldType2 = FieldType.newBuilder()
-                .withName("vector")
-                .withDataType(DataType.FloatVector)
-                .withDimension(dimension)
-                .build();
+            schema.addField(AddFieldReq.builder()
+                    .fieldName("id")
+                    .dataType(DataType.Int64)
+                    .isPrimaryKey(true)
+                    .autoID(true)
+                    .build());
 
-        FieldType fieldType3 = FieldType.newBuilder()
-                .withName("content")
-                .withDataType(DataType.VarChar)
-                .withMaxLength(65535)
-                .build();
+            schema.addField(AddFieldReq.builder()
+                    .fieldName("vector")
+                    .dataType(DataType.FloatVector)
+                    .dimension(dimension)
+                    .build());
 
-        CreateCollectionParam createCollectionReq = CreateCollectionParam.newBuilder()
-                .withCollectionName(collectionName)
-                .withDescription("代码片段向量集合")
-                .withShardsNum(2)
-                .addFieldType(fieldType1)
-                .addFieldType(fieldType2)
-                .addFieldType(fieldType3)
-                .build();
+            schema.addField(AddFieldReq.builder()
+                    .fieldName("content")
+                    .dataType(DataType.VarChar)
+                    .maxLength(65535)
+                    .build());
 
-        R<RpcStatus> response = milvusClient.createCollection(createCollectionReq);
-        return response.getStatus() == R.Status.Success.getCode();
+            schema.addField(AddFieldReq.builder()
+                    .fieldName("type")
+                    .dataType(DataType.VarChar)
+                    .maxLength(100)
+                    .build());
+
+            schema.addField(AddFieldReq.builder()
+                    .fieldName("site")
+                    .dataType(DataType.VarChar)
+                    .maxLength(500)
+                    .build());
+
+            schema.addField(AddFieldReq.builder()
+                    .fieldName("project_name")
+                    .dataType(DataType.VarChar)
+                    .maxLength(200)
+                    .build());
+
+            schema.addField(AddFieldReq.builder()
+                    .fieldName("class_name")
+                    .dataType(DataType.VarChar)
+                    .maxLength(200)
+                    .build());
+
+            schema.addField(AddFieldReq.builder()
+                    .fieldName("method_name")
+                    .dataType(DataType.VarChar)
+                    .maxLength(200)
+                    .build());
+
+            List<IndexParam> indexes = new ArrayList<>();
+            indexes.add(IndexParam.builder()
+                    .fieldName("vector")
+                    .indexType(IndexParam.IndexType.HNSW)
+                    .metricType(IndexParam.MetricType.COSINE)
+                    .build());
+
+            CreateCollectionReq requestCreate = CreateCollectionReq.builder()
+                    .collectionName(collectionName)
+                    .collectionSchema(schema)
+                    .indexParams(indexes)
+                    .build();
+
+            milvusClient.createCollection(requestCreate);
+            return true;
+        } catch (Exception e) {
+            log.error("创建集合失败: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -79,12 +132,17 @@ public class MilvusUtils {
      * @return 是否删除成功
      */
     public boolean dropCollection(String collectionName) {
-        DropCollectionParam dropCollectionReq = DropCollectionParam.newBuilder()
-                .withCollectionName(collectionName)
-                .build();
+        try {
+            DropCollectionReq dropCollectionReq = DropCollectionReq.builder()
+                    .collectionName(collectionName)
+                    .build();
 
-        R<RpcStatus> response = milvusClient.dropCollection(dropCollectionReq);
-        return response.getStatus() == R.Status.Success.getCode();
+            milvusClient.dropCollection(dropCollectionReq);
+            return true;
+        } catch (Exception e) {
+            log.error("删除集合失败: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -94,12 +152,16 @@ public class MilvusUtils {
      * @return 是否存在
      */
     public boolean hasCollection(String collectionName) {
-        HasCollectionParam hasCollectionReq = HasCollectionParam.newBuilder()
-                .withCollectionName(collectionName)
-                .build();
+        try {
+            HasCollectionReq hasCollectionReq = HasCollectionReq.builder()
+                    .collectionName(collectionName)
+                    .build();
 
-        R<Boolean> response = milvusClient.hasCollection(hasCollectionReq);
-        return response.getStatus() == R.Status.Success.getCode() && response.getData();
+            return milvusClient.hasCollection(hasCollectionReq);
+        } catch (Exception e) {
+            log.error("检查集合是否存在失败: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -109,12 +171,17 @@ public class MilvusUtils {
      * @return 是否加载成功
      */
     public boolean loadCollection(String collectionName) {
-        LoadCollectionParam loadCollectionReq = LoadCollectionParam.newBuilder()
-                .withCollectionName(collectionName)
-                .build();
+        try {
+            LoadCollectionReq loadCollectionReq = LoadCollectionReq.builder()
+                    .collectionName(collectionName)
+                    .build();
 
-        R<RpcStatus> response = milvusClient.loadCollection(loadCollectionReq);
-        return response.getStatus() == R.Status.Success.getCode();
+            milvusClient.loadCollection(loadCollectionReq);
+            return true;
+        } catch (Exception e) {
+            log.error("加载集合失败: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -124,51 +191,17 @@ public class MilvusUtils {
      * @return 是否释放成功
      */
     public boolean releaseCollection(String collectionName) {
-        ReleaseCollectionParam releaseCollectionReq = ReleaseCollectionParam.newBuilder()
-                .withCollectionName(collectionName)
-                .build();
+        try {
+            ReleaseCollectionReq releaseCollectionReq = ReleaseCollectionReq.builder()
+                    .collectionName(collectionName)
+                    .build();
 
-        R<RpcStatus> response = milvusClient.releaseCollection(releaseCollectionReq);
-        return response.getStatus() == R.Status.Success.getCode();
-    }
-
-    /**
-     * 创建索引
-     *
-     * @param collectionName 集合名称
-     * @param fieldName 字段名称
-     * @param indexType 索引类型
-     * @param metricType 度量类型
-     * @return 是否创建成功
-     */
-    public boolean createIndex(String collectionName, String fieldName, IndexType indexType, MetricType metricType) {
-        CreateIndexParam createIndexReq = CreateIndexParam.newBuilder()
-                .withCollectionName(collectionName)
-                .withFieldName(fieldName)
-                .withIndexType(indexType)
-                .withMetricType(metricType)
-                .withExtraParam(new JSONObject().toJSONString())
-                .build();
-
-        R<RpcStatus> response = milvusClient.createIndex(createIndexReq);
-        return response.getStatus() == R.Status.Success.getCode();
-    }
-
-    /**
-     * 删除索引
-     *
-     * @param collectionName 集合名称
-     * @param fieldName 字段名称
-     * @return 是否删除成功
-     */
-    public boolean dropIndex(String collectionName, String fieldName) {
-        DropIndexParam dropIndexReq = DropIndexParam.newBuilder()
-                .withCollectionName(collectionName)
-                .withIndexName(fieldName)
-                .build();
-
-        R<RpcStatus> response = milvusClient.dropIndex(dropIndexReq);
-        return response.getStatus() == R.Status.Success.getCode();
+            milvusClient.releaseCollection(releaseCollectionReq);
+            return true;
+        } catch (Exception e) {
+            log.error("释放集合失败: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -177,59 +210,47 @@ public class MilvusUtils {
      * @param collectionName 集合名称
      * @param vectors 向量数据
      * @param contents 文本内容
+     * @param types 类型
+     * @param sites 位置
+     * @param project_name 项目名称
+     * @param classNames 类名列表
+     * @param methodNames 方法名列表
      * @return 是否插入成功
      */
-    public boolean insert(String collectionName, List<List<Float>> vectors, List<String> contents, List<String> types, List<String> sites, String project_name, List<String> classNames, List<String> methodNames) {
-        List<InsertParam.Field> fields = new ArrayList<>();
+    public boolean insert(String collectionName, List<List<Float>> vectors, List<String> contents,
+                         List<String> types, List<String> sites, String project_name,
+                         List<String> classNames, List<String> methodNames) {
+        try {
+            List<JsonObject> data = new ArrayList<>();
 
-        fields.add(new InsertParam.Field("vector", vectors));
-        fields.add(new InsertParam.Field("content", contents));
-        fields.add(new InsertParam.Field("type", types));
-        fields.add(new InsertParam.Field("site", sites));
-        fields.add(new InsertParam.Field("project_name", Collections.nCopies(types.size(), project_name)));
-        fields.add(new InsertParam.Field("class_name", classNames));
-        fields.add(new InsertParam.Field("method_name", methodNames));
+            for (int i = 0; i < vectors.size(); i++) {
+                Map<String, Object> rowData = new HashMap<>();
+                rowData.put("vector", vectors.get(i));
+                rowData.put("content", contents.get(i));
+                rowData.put("type", types.get(i));
+                rowData.put("site", sites.get(i));
+                rowData.put("project_name", project_name);
+                rowData.put("class_name", classNames.get(i));
+                rowData.put("method_name", methodNames.get(i));
 
-        InsertParam insertParam = InsertParam.newBuilder()
-                .withCollectionName(collectionName)
-                .withFields(fields)
-                .build();
+                // 将Map转换为Gson的JsonObject
+                String jsonStr = gson.toJson(rowData);
+                JsonObject jsonObject = gson.fromJson(jsonStr, JsonObject.class);
+                data.add(jsonObject);
+            }
 
-        R<MutationResult> response = milvusClient.insert(insertParam);
-        return response.getStatus() == R.Status.Success.getCode();
+            InsertReq insertReq = InsertReq.builder()
+                    .collectionName(collectionName)
+                    .data(data)
+                    .build();
+
+            InsertResp response = milvusClient.insert(insertReq);
+            return response.getInsertCnt() > 0;
+        } catch (Exception e) {
+            log.error("插入数据失败: {}", e.getMessage());
+            return false;
+        }
     }
-
-    /**
-     * 批量插入数据
-     *
-     * @param collectionName 集合名称
-     * @param batchSize 批次大小
-     * @param vectors 向量数据
-     * @param contents 文本内容
-     * @return 是否插入成功
-     */
-//    public boolean batchInsert(String collectionName, int batchSize, List<List<Float>> vectors, List<String> contents) {
-//        if (vectors.size() != contents.size()) {
-//            throw new IllegalArgumentException("向量和内容数量不匹配");
-//        }
-//
-//        int totalSize = vectors.size();
-//        boolean allSuccess = true;
-//
-//        for (int i = 0; i < totalSize; i += batchSize) {
-//            int endIndex = Math.min(i + batchSize, totalSize);
-//
-//            List<List<Float>> batchVectors = vectors.subList(i, endIndex);
-//            List<String> batchContents = contents.subList(i, endIndex);
-//
-//            boolean success = insert(collectionName, batchVectors, batchContents);
-//            if (!success) {
-//                allSuccess = false;
-//            }
-//        }
-//
-//        return allSuccess;
-//    }
 
     /**
      * 删除数据
@@ -239,15 +260,20 @@ public class MilvusUtils {
      * @return 是否删除成功
      */
     public boolean deleteByIds(String collectionName, List<Long> ids) {
-        String expr = "id in " + ids.toString().replace("[", "(").replace("]", ")");
+        try {
+            String expr = "id in [" + String.join(",", ids.stream().map(String::valueOf).toArray(String[]::new)) + "]";
 
-        DeleteParam deleteParam = DeleteParam.newBuilder()
-                .withCollectionName(collectionName)
-                .withExpr(expr)
-                .build();
+            DeleteReq deleteReq = DeleteReq.builder()
+                    .collectionName(collectionName)
+                    .filter(expr)
+                    .build();
 
-        R<MutationResult> response = milvusClient.delete(deleteParam);
-        return response.getStatus() == R.Status.Success.getCode();
+            milvusClient.delete(deleteReq);
+            return true;
+        } catch (Exception e) {
+            log.error("删除数据失败: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -258,91 +284,123 @@ public class MilvusUtils {
      * @return 是否删除成功
      */
     public boolean deleteByExpr(String collectionName, String expr) {
-        DeleteParam deleteParam = DeleteParam.newBuilder()
-                .withCollectionName(collectionName)
-                .withExpr(expr)
-                .build();
+        try {
+            DeleteReq deleteReq = DeleteReq.builder()
+                    .collectionName(collectionName)
+                    .filter(expr)
+                    .build();
 
-        R<MutationResult> response = milvusClient.delete(deleteParam);
-        return response.getStatus() == R.Status.Success.getCode();
+            milvusClient.delete(deleteReq);
+            return true;
+        } catch (Exception e) {
+            log.error("根据表达式删除数据失败: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**
      * 查询数据
      *
      * @param collectionName 集合名称
-     * @param expr 查询表达式
-     * @param outputFields 输出字段
+     * @param expr           查询表达式
+     * @param outputFields   输出字段
      * @return 查询结果
      */
-    public List<Map<String, Object>> query(String collectionName, String expr, List<String> outputFields) {
-        QueryParam queryParam = QueryParam.newBuilder()
-                .withCollectionName(collectionName)
-                .withExpr(expr)
-                .withOutFields(outputFields)
-                .build();
+    public List<QueryResp.QueryResult> query(String collectionName, String expr, List<String> outputFields) {
+        try {
+            QueryReq queryReq = QueryReq.builder()
+                    .collectionName(collectionName)
+                    .filter(expr)
+                    .outputFields(outputFields)
+                    .build();
 
-        R<QueryResults> response = milvusClient.query(queryParam);
-        if (response.getStatus() != R.Status.Success.getCode()) {
+            QueryResp response = milvusClient.query(queryReq);
+            return response.getQueryResults();
+        } catch (Exception e) {
+            log.error("查询数据失败: {}", e.getMessage());
             return Collections.emptyList();
         }
-
-        List<Map<String, Object>> results = new ArrayList<>();
-        QueryResults queryResults = response.getData();
-
-        for (int i = 0; i < queryResults.getFieldsDataCount(); i++) {
-            Map<String, Object> row = new HashMap<>();
-            for (String field : outputFields) {
-                // 这里需要根据字段类型进行相应的数据提取
-                // 简化处理，实际使用时需要更详细的字段数据处理
-                row.put(field, queryResults.getFieldsData(i).getScalars());
-            }
-            results.add(row);
-        }
-
-        return results;
     }
 
     /**
      * 向量搜索
      *
      * @param collectionName 集合名称
-     * @param vectors        搜索向量
-     * @param topK           返回结果数量
-     * @param metricType     度量类型
+     * @param vectors 搜索向量
+     * @param topK 返回结果数量
+     * @param metricType 度量类型
+     * @param expr 表达式
+     * @param params 参数
      * @return 搜索结果
      */
-    public SearchResults search(String collectionName, List<List<Float>> vectors, int topK, MetricType metricType) {
-        SearchParam searchParam = SearchParam.newBuilder()
-                .withCollectionName(collectionName)
-                .withMetricType(metricType)
-                .withTopK(topK)
-                .withVectors(vectors)
-                .withVectorFieldName("vector")
-                .withParams(new JSONObject().toJSONString())
-                .addOutField("content")
-                .build();
+    public SearchResp search(String collectionName, List<List<Float>> vectors, int topK,
+                           IndexParam.MetricType metricType, String expr, Map<String, Object> params) {
+        try {
+            // 将List<List<Float>>转换为List<BaseVector>
+            List<BaseVector> baseVectors = new ArrayList<>();
+            for (List<Float> vector : vectors) {
+                // 转换Float为float数组
+                float[] floatArray = new float[vector.size()];
+                for (int i = 0; i < vector.size(); i++) {
+                    floatArray[i] = vector.get(i);
+                }
+                baseVectors.add(new FloatVec(floatArray));
+            }
 
-        R<SearchResults> response = milvusClient.search(searchParam);
-        if (response.getStatus() != R.Status.Success.getCode()) {
+            SearchReq searchReq = SearchReq.builder()
+                    .collectionName(collectionName)
+                    .data(baseVectors)
+                    .annsField("vector")
+                    .topK(topK)
+                    .outputFields(List.of("content", "class_name", "method_name", "type", "site", "project_name"))
+                    .filter(expr)
+                    .searchParams(params)
+                    .build();
+
+            return milvusClient.search(searchReq);
+        } catch (Exception e) {
+            log.error("向量搜索失败: {}", e.getMessage());
             return null;
         }
-
-        List<List<Map<String, Object>>> results = new ArrayList<>();
-
-        return response.getData();
-
-        // 处理搜索结果
-//        for (int i = 0; i < searchResults.getResults().getIds().getIntId().getDataCount(); i++) {
-//            List<Map<String, Object>> resultItem = new ArrayList<>();
-//            // 这里需要根据实际的搜索结果结构进行数据处理
-//            // 简化处理，实际使用时需要更详细的搜索结果解析
-//            resultItem.add(new HashMap<>());
-//            results.add(resultItem);
-//        }
-
     }
 
+    /**
+     * 向量搜索（无表达式）
+     *
+     * @param collectionName 集合名称
+     * @param vectors 搜索向量
+     * @param topK 返回结果数量
+     * @param metricType 度量类型
+     * @return 搜索结果
+     */
+    public SearchResp search(String collectionName, List<List<Float>> vectors, int topK,
+                           IndexParam.MetricType metricType) {
+        try {
+            // 将List<List<Float>>转换为List<BaseVector>
+            List<BaseVector> baseVectors = new ArrayList<>();
+            for (List<Float> vector : vectors) {
+                // 转换Float为float数组
+                float[] floatArray = new float[vector.size()];
+                for (int i = 0; i < vector.size(); i++) {
+                    floatArray[i] = vector.get(i);
+                }
+                baseVectors.add(new FloatVec(floatArray));
+            }
+
+            SearchReq searchReq = SearchReq.builder()
+                    .collectionName(collectionName)
+                    .data(baseVectors)
+                    .annsField("vector")
+                    .topK(topK)
+                    .outputFields(List.of("content", "class_name", "method_name", "type", "site", "project_name"))
+                    .build();
+
+            return milvusClient.search(searchReq);
+        } catch (Exception e) {
+            log.error("向量搜索失败: {}", e.getMessage());
+            return null;
+        }
+    }
 
     /**
      * 关闭客户端连接

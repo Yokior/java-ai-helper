@@ -22,8 +22,7 @@ public class EmbeddingServiceTest {
 
     @Test
     void embedding() {
-        List<Float> floats = embeddingService.embedding("测试文本");
+        List<Float> floats = embeddingService.embedding("计算用户问题与文档段落之间的BM25相似度分数");
         System.out.println(floats);
-        System.out.println(floats.size());
     }
 }

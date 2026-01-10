@@ -1,7 +1,11 @@
 package com.yokior.milvus;
 
+import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSONWriter;
+import com.google.protobuf.Descriptors;
+import com.yokior.common.EmbedSearchResult;
 import com.yokior.utils.MilvusUtils;
-import io.milvus.grpc.SearchResults;
+import io.milvus.grpc.*;
 import io.milvus.param.MetricType;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
@@ -31,8 +35,10 @@ public class MilvusServiceTest {
                 .map(Float::parseFloat)
                 .collect(Collectors.toList());
 
-        SearchResults results = milvusUtils.search("TestJava", List.of(vector), 5, MetricType.COSINE);
-        log.info("原始数据: {}",  results);
+//        SearchResults results = milvusUtils.search("JavaProject", List.of(vector), 5, MetricType.COSINE);
+
+//        log.info("原始数据: {}",  results);
+
 
     }
 
@@ -53,7 +59,7 @@ public class MilvusServiceTest {
         String className = "MilvusServiceTest";
         String methodName = "testInsert";
 
-        boolean b = milvusUtils.insert("JavaProject", List.of(vector), List.of(content), List.of(type), List.of(site), projectName, List.of(className), List.of(methodName));
+        boolean b = milvusUtils.insert("TestJava", List.of(vector), List.of(content), List.of(type), List.of(site), projectName, List.of(className), List.of(methodName));
         log.info("插入结果：{}", b);
     }
 }

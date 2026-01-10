@@ -29,7 +29,7 @@ public class HandleCodeServiceTest {
 
 
     /**
-     * 测试springboot-ai-qa-system
+     * 测试springboot-ai-qa-system 1768块
      */
     @Test
     void springboot_ai_qa_systeam() throws Exception {
