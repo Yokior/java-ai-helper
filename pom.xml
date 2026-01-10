@@ -15,6 +15,7 @@
     <description>java-ai-helper</description>
     <modules>
         <module>handle-code</module>
+        <module>ai-chat</module>
     </modules>
     <packaging>pom</packaging>
     <url/>

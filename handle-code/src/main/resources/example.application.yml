@@ -1,0 +1,22 @@
+
+logging:
+  level:
+    com.yokior.service.handlecode: DEBUG
+    com.yokior.split: DEBUG
+
+spring:
+  application:
+    name: java-ai-helper
+  ai:
+    openai:
+      base-url: "http://localhost:11434"
+      api-key: "Ollama"
+      embedding:
+        options:
+          model: qwen3-embedding:8b
+          dimensions: 512
+
+
+milvus:
+  host: 127.0.0.1  # 你部署的 Milvus 地址
+  port: 19530      # 默认 gRPC 端口

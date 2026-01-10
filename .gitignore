@@ -33,7 +33,7 @@ build/
 .vscode/
 
 **/*.yml
-!handle-code/src/main/resources/example.application.yml
+!example.application.yml
 
 CLAUDE.md
 开发用/
