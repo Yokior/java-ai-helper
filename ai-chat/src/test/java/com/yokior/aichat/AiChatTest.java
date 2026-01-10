@@ -22,7 +22,7 @@ public class AiChatTest {
 
     @Test
     void test() {
-        String res = aiChatService.test("你好");
+        String res = aiChatService.test("不同团队之间数据隔离是如何实现的？");
         log.info(res);
     }
 }

@@ -9,4 +9,5 @@ public interface IAiChatService {
 
     String test(String userQuery);
 
+
 }
