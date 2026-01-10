@@ -391,6 +391,7 @@ public class MilvusUtils {
                     .collectionName(collectionName)
                     .data(baseVectors)
                     .annsField("vector")
+                    .metricType(metricType)
                     .topK(topK)
                     .outputFields(List.of("content", "class_name", "method_name", "type", "site", "project_name"))
                     .build();

@@ -7,6 +7,8 @@ import com.yokior.common.EmbedSearchResult;
 import com.yokior.utils.MilvusUtils;
 import io.milvus.grpc.*;
 import io.milvus.param.MetricType;
+import io.milvus.v2.common.IndexParam;
+import io.milvus.v2.service.vector.response.SearchResp;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,9 +37,27 @@ public class MilvusServiceTest {
                 .map(Float::parseFloat)
                 .collect(Collectors.toList());
 
-//        SearchResults results = milvusUtils.search("JavaProject", List.of(vector), 5, MetricType.COSINE);
 
-//        log.info("原始数据: {}",  results);
+        // 转换结果
+        SearchResp searchResp = milvusUtils.search("JavaProject", List.of(vector), 5, IndexParam.MetricType.COSINE);
+        List<EmbedSearchResult> embedSearchResultList = new ArrayList<>();
+
+        for (SearchResp.SearchResult data : searchResp.getSearchResults().get(0)) {
+            EmbedSearchResult embedSearchResult = new EmbedSearchResult();
+            Map<String, Object> entity = data.getEntity();
+            embedSearchResult.setId((Long) data.getId());
+            embedSearchResult.setScore(data.getScore());
+            embedSearchResult.setContent((String) entity.get("content"));
+            embedSearchResult.setType((String) entity.get("type"));
+            embedSearchResult.setClassName((String) entity.get("class_name"));
+            embedSearchResult.setMethodName((String) entity.get("method_name"));
+            embedSearchResult.setSite((String) entity.get("site"));
+            embedSearchResult.setProjectName((String) entity.get("project_name"));
+
+            log.info(JSONObject.toJSONString(embedSearchResult, JSONWriter.Feature.PrettyFormat));
+
+            embedSearchResultList.add(embedSearchResult);
+        }
 
 
     }
