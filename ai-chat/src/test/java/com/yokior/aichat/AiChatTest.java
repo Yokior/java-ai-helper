@@ -1,7 +1,11 @@
 package com.yokior.aichat;
 
+import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
+import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSONWriter;
 import com.yokior.AiChatStarter;
+import com.yokior.saver.MyRedisSaver;
 import com.yokior.service.aichat.IAiChatService;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
@@ -20,6 +24,9 @@ public class AiChatTest {
     @Autowired
     private IAiChatService aiChatService;
 
+    @Autowired
+    private MyRedisSaver myRedisSaver;
+
 
     @Test
     void test() {
@@ -29,7 +36,13 @@ public class AiChatTest {
 
     @Test
     void agentTest() throws GraphRunnerException {
-        String res = aiChatService.agentTest("告诉我现在的时间");
+        String res = aiChatService.agentTest("现在是几点钟");
         log.info(res);
+    }
+
+    @Test
+    void listCheckpoint() {
+        String threadId = "test-thread";
+        log.info("{}", JSONObject.toJSONString(myRedisSaver.list(RunnableConfig.builder().threadId(threadId).build()), JSONWriter.Feature.PrettyFormat));
     }
 }

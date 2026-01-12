@@ -11,6 +11,7 @@ import com.yokior.advisor.ChatLogAdvisor;
 import com.yokior.common.EmbedSearchResult;
 import com.yokior.hook.ChatLogHook;
 import com.yokior.interceptor.ChatLogInterceptor;
+import com.yokior.saver.MyRedisSaver;
 import com.yokior.service.embedding.IEmbeddingService;
 import com.yokior.service.milvus.IMilvusService;
 import com.yokior.tool.DateTimeTools;
@@ -46,7 +47,10 @@ public class AiChatService implements IAiChatService {
     private ChatModel chatModel;
 
     @Autowired
-    RedissonClient redissonClient;
+    private RedissonClient redissonClient;
+
+    @Autowired
+    private MyRedisSaver myRedisSaver;
 
 
     public AiChatService(ChatClient.Builder chatClientBuilder) {
@@ -109,7 +113,7 @@ public class AiChatService implements IAiChatService {
                 .methodTools(new DateTimeTools())
 //                .interceptors(new ChatLogInterceptor())
                 .hooks(new ChatLogHook())
-                .saver(redisSaver)
+                .saver(myRedisSaver)
                 .build();
 
         RunnableConfig config = RunnableConfig.builder()
