@@ -1,5 +1,7 @@
 package com.yokior.service.aichat;
 
+import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
+
 /**
  * @author Yokior
  * @description
@@ -9,5 +11,5 @@ public interface IAiChatService {
 
     String test(String userQuery);
 
-
+    String agentTest(String userQuery) throws GraphRunnerException;
 }

@@ -1,14 +1,27 @@
 package com.yokior.service.aichat;
 
+
+
+import com.alibaba.cloud.ai.graph.RunnableConfig;
+import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.alibaba.cloud.ai.graph.checkpoint.savers.postgresql.PostgresSaver;
+import com.alibaba.cloud.ai.graph.checkpoint.savers.redis.RedisSaver;
+import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.yokior.advisor.ChatLogAdvisor;
 import com.yokior.common.EmbedSearchResult;
+import com.yokior.hook.ChatLogHook;
+import com.yokior.interceptor.ChatLogInterceptor;
 import com.yokior.service.embedding.IEmbeddingService;
 import com.yokior.service.milvus.IMilvusService;
+import com.yokior.tool.DateTimeTools;
+import com.yokior.tool.SearchTool;
+import org.redisson.api.RedissonClient;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
-import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.tool.function.FunctionToolCallback;
+import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -28,6 +41,12 @@ public class AiChatService implements IAiChatService {
 
     @Autowired
     private IEmbeddingService embeddingService;
+
+    @Autowired
+    private ChatModel chatModel;
+
+    @Autowired
+    RedissonClient redissonClient;
 
 
     public AiChatService(ChatClient.Builder chatClientBuilder) {
@@ -59,5 +78,46 @@ public class AiChatService implements IAiChatService {
                 .user(userQuery)
                 .call()
                 .content();
+    }
+
+    @Override
+    public String agentTest(String userQuery) throws GraphRunnerException {
+
+        FunctionToolCallback<String, String> searchToolCallback = FunctionToolCallback.builder("搜索工具", new SearchTool())
+                .description("根据用户问题，从知识库中搜索内容")
+                .inputType(String.class)
+                .build();
+
+        PostgresSaver postgresSaver = PostgresSaver.builder()
+//                .createTables(true)
+                .host("127.0.0.1")
+                .port(5432)
+                .user("postgres")
+                .password("root")
+                .database("my_test_database")
+                .build();
+
+        RedisSaver redisSaver = RedisSaver.builder()
+                .redisson(redissonClient)
+                .build();
+
+        ReactAgent agent = ReactAgent.builder()
+                .name("助手")
+                .systemPrompt("你是一个助手")
+                .model(chatModel)
+                .tools(searchToolCallback)
+                .methodTools(new DateTimeTools())
+//                .interceptors(new ChatLogInterceptor())
+                .hooks(new ChatLogHook())
+                .saver(redisSaver)
+                .build();
+
+        RunnableConfig config = RunnableConfig.builder()
+                .threadId("test-thread")
+                .build();
+
+        AssistantMessage message = agent.call(userQuery, config);
+
+        return message.getText();
     }
 }
