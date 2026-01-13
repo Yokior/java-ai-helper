@@ -43,6 +43,6 @@ public class AiChatTest {
     @Test
     void listCheckpoint() {
         String threadId = "test-thread";
-        log.info("{}", JSONObject.toJSONString(myRedisSaver.list(RunnableConfig.builder().threadId(threadId).build()), JSONWriter.Feature.PrettyFormat));
+        log.info("{}", JSONObject.toJSONString(myRedisSaver.list(RunnableConfig.builder().threadId(threadId).build())));
     }
 }

@@ -117,7 +117,8 @@ public class AiChatService implements IAiChatService {
                 .build();
 
         RunnableConfig config = RunnableConfig.builder()
-                .threadId("test-thread")
+                .threadId("test-conversation-id-001")
+                .addMetadata("userId", "666666")
                 .build();
 
         AssistantMessage message = agent.call(userQuery, config);
