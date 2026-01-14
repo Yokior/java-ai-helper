@@ -9,6 +9,8 @@ import com.alibaba.cloud.ai.graph.serializer.check_point.CheckPointSerializer;
 import com.alibaba.cloud.ai.graph.serializer.plain_text.jackson.SpringAIJacksonStateSerializer;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.TypeReference;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yokior.entity.ChatLog;
 import com.yokior.entity.UserConversation;
@@ -37,6 +39,11 @@ import java.util.concurrent.TimeUnit;
 @Component
 @Slf4j
 public class MyRedisSaver implements BaseCheckpointSaver {
+
+    /**
+     * TODO: 配置过期时间 TTL
+     */
+
 
     private static final String CONVERSATION_CONFIG_PREFIX = "chat:conservation:config:";
     private static final String CHECKPOINT_PREFIX = "chat:checkpoint:content:";
@@ -289,6 +296,63 @@ public class MyRedisSaver implements BaseCheckpointSaver {
 
 
     }
+
+
+    /**
+     * 重新加载会话
+     * 将数据库中存储的会话信息加载到redis中
+     * 聊天记录以及配置信息
+     * @param conversationId
+     */
+    public void reloadConversation(String conversationId) {
+
+        if (StringUtils.isEmpty(conversationId)) {
+            throw new RuntimeException("conversationId 不能为空！");
+        }
+
+        // 查询数据库对应的会话信息
+        ChatLog dbChatLog = chatSaverService.getById(conversationId);
+        if (dbChatLog == null) {
+            throw new RuntimeException("对应的会话不存在！");
+        }
+        LinkedList<Checkpoint> checkpoints = dbChatLog.getContent();
+
+        // 查询数据库对应的用户信息
+        UserConversation userConversation = userConversationService.lambdaQuery()
+                .eq(UserConversation::getConversationId, conversationId)
+                .one();
+
+        if (userConversation == null) {
+            throw new RuntimeException("对应的用户信息不存在！");
+        }
+        Long userId = userConversation.getUserId();
+
+
+        RLock lock = redisson.getLock(LOCK_PREFIX + conversationId);
+        try {
+
+            boolean b = lock.tryLock(1, TimeUnit.SECONDS);
+            if (!b) {
+                throw new RuntimeException("获取锁失败！");
+            }
+
+            // 获取conversationId对应的RBucket
+            RBucket<String> bucket = redisson.getBucket(CHECKPOINT_PREFIX + conversationId);
+            bucket.set(serializeCheckpoints(checkpoints));
+            // 获取conversationId对应的RMap
+            RMap<String, String> map = redisson.getMap(CONVERSATION_CONFIG_PREFIX + conversationId);
+            map.put(USER_ID, userId.toString());
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+
+    }
+
 
 
     /**

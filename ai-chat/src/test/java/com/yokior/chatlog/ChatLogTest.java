@@ -61,4 +61,11 @@ public class ChatLogTest {
         myRedisSaver.closeConversation(conversationId);
     }
 
+
+    @Test
+    void testReloadConversation() {
+        String conversationId = "test-conversation-id-001";
+        myRedisSaver.reloadConversation(conversationId);
+    }
+
 }
