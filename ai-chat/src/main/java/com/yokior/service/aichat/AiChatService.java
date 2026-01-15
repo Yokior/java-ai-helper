@@ -2,15 +2,16 @@ package com.yokior.service.aichat;
 
 
 
+import com.alibaba.cloud.ai.graph.NodeOutput;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.alibaba.cloud.ai.graph.agent.hook.hip.HumanInTheLoopHook;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.postgresql.PostgresSaver;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.redis.RedisSaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.yokior.advisor.ChatLogAdvisor;
 import com.yokior.common.EmbedSearchResult;
 import com.yokior.hook.ChatLogHook;
-import com.yokior.interceptor.ChatLogInterceptor;
 import com.yokior.saver.MyRedisSaver;
 import com.yokior.service.embedding.IEmbeddingService;
 import com.yokior.service.milvus.IMilvusService;
@@ -21,11 +22,11 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.function.FunctionToolCallback;
-import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * @author Yokior
@@ -85,7 +86,7 @@ public class AiChatService implements IAiChatService {
     }
 
     @Override
-    public String agentTest(String userQuery) throws GraphRunnerException {
+    public AssistantMessage agentTest(String userQuery) throws GraphRunnerException {
 
         FunctionToolCallback<String, String> searchToolCallback = FunctionToolCallback.builder("搜索工具", new SearchTool())
                 .description("根据用户问题，从知识库中搜索内容")
@@ -111,8 +112,8 @@ public class AiChatService implements IAiChatService {
                 .model(chatModel)
                 .tools(searchToolCallback)
                 .methodTools(new DateTimeTools())
-//                .interceptors(new ChatLogInterceptor())
-                .hooks(new ChatLogHook())
+//                .interceptors(new ChatLogInterceptor()) // 记录完整API调用
+                .hooks(new ChatLogHook()) // 记录聊天记录
                 .saver(myRedisSaver)
                 .build();
 
@@ -121,8 +122,33 @@ public class AiChatService implements IAiChatService {
                 .addMetadata("userId", "666666")
                 .build();
 
-        AssistantMessage message = agent.call(userQuery, config);
+        return agent.call(userQuery, config);
+    }
 
-        return message.getText();
+    @Override
+    public Optional<NodeOutput> agentTestHuman(String userQuery) throws GraphRunnerException {
+
+        HumanInTheLoopHook humanInTheLoopHook = HumanInTheLoopHook.builder()
+                .approvalOn("getCurrentDateTime", "需要手动确定getCurrentDateTime调用")
+                .build();
+
+
+        ReactAgent agent = ReactAgent.builder()
+                .name("助手")
+                .systemPrompt("你是一个助手")
+                .model(chatModel)
+                .methodTools(new DateTimeTools())
+//                .interceptors(new ChatLogInterceptor()) // 记录完整API调用
+                .hooks(humanInTheLoopHook)
+                .hooks(new ChatLogHook()) // 记录聊天记录
+                .saver(myRedisSaver)
+                .build();
+
+        RunnableConfig config = RunnableConfig.builder()
+                .threadId("test-conversation-id-002")
+                .addMetadata("userId", "666666")
+                .build();
+
+        return agent.invokeAndGetOutput(userQuery, config);
     }
 }
