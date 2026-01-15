@@ -134,9 +134,20 @@ public class AiChatTest {
                 System.out.println("执行完成");
                 System.out.println("最终结果: " + finalResult.get());
             }
+
+            try {
+                latch.await(1, TimeUnit.HOURS);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         }
 
-        latch.countDown(); // 去掉这行就可以阻塞主线程
+
+    }
+
+    @Test
+    void waitTime() {
+        CountDownLatch latch = new CountDownLatch(1);
 
         try {
             latch.await(1, TimeUnit.HOURS);
