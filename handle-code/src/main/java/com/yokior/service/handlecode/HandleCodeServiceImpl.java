@@ -185,8 +185,13 @@ public class HandleCodeServiceImpl implements IHandleCodeService {
 
                     log.debug("文件 {} 处理完毕，已投入队列", path.getFileName());
 
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.error("处理文件 {} 失败", path, e);
+                    throw new RuntimeException(e);
                 } catch (Exception e) {
                     log.error("处理文件 {} 失败", path, e);
+                    throw new RuntimeException(e);
                 }
             }, codeProcessExecutor);
 

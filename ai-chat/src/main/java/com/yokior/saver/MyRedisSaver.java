@@ -14,6 +14,7 @@ import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapp
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yokior.entity.ChatLog;
 import com.yokior.entity.UserConversation;
+import com.yokior.service.chatexpiration.IChatExpirationService;
 import com.yokior.service.chatlog.IChatSaverService;
 import com.yokior.service.userconversation.IUserConversationService;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.*;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -40,17 +42,19 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class MyRedisSaver implements BaseCheckpointSaver {
 
-    /**
-     * TODO: 配置过期时间 TTL
-     */
+
+    // 默认TTL 不在set中使用 详情见 com.yokior.service.chatexpiration.ChatExpirationService
+    public static final long TTL_SECONDS = 60;
+
+    // 兜底用的TTL 默认时间是上述的2倍
+    private static final long TTL_SECONDS_BACKUP = TimeUnit.SECONDS.toSeconds(TTL_SECONDS * 2);
+
+    public static final String CONVERSATION_CONFIG_PREFIX = "chat:conservation:config:";
+    public static final String CHECKPOINT_PREFIX = "chat:checkpoint:content:";
+    public static final String LOCK_PREFIX = "chat:checkpoint:lock:";
 
 
-    private static final String CONVERSATION_CONFIG_PREFIX = "chat:conservation:config:";
-    private static final String CHECKPOINT_PREFIX = "chat:checkpoint:content:";
-    private static final String LOCK_PREFIX = "chat:checkpoint:lock:";
-
-
-    private static final String USER_ID = "user_id";
+    public static final String USER_ID = "user_id";
 
 
     private final Serializer<Checkpoint> checkpointSerializer;
@@ -63,6 +67,9 @@ public class MyRedisSaver implements BaseCheckpointSaver {
 
     @Autowired
     private IUserConversationService userConversationService;
+
+    @Autowired
+    private IChatExpirationService chatExpirationService;
 
 
     public MyRedisSaver() {
@@ -160,6 +167,7 @@ public class MyRedisSaver implements BaseCheckpointSaver {
                 String userId = getUserIdByConfig(config);
                 RMap<String, String> map = redisson.getMap(CONVERSATION_CONFIG_PREFIX + conversationId);
                 map.put(USER_ID, userId);
+                map.expire(Duration.ofSeconds(TTL_SECONDS_BACKUP));
 
                 return Optional.empty();
             }
@@ -200,11 +208,16 @@ public class MyRedisSaver implements BaseCheckpointSaver {
             // 获取conversationId对应的RBucket
             RBucket<String> bucket = redisson.getBucket(CHECKPOINT_PREFIX + conversationId);
             String content = bucket.get();
+            // 如果是新的对话 投递到队列
+            if (content == null) {
+                chatExpirationService.post(conversationId);
+            }
             LinkedList<Checkpoint> checkpoints = deserializeCheckpoints(content);
+
 
             // 将新的checkpoint加入队头 并保存bucket
             checkpoints.push(checkpoint);
-            bucket.set(serializeCheckpoints(checkpoints));
+            bucket.set(serializeCheckpoints(checkpoints), Duration.ofSeconds(TTL_SECONDS_BACKUP));
 
             return config;
 
@@ -266,20 +279,21 @@ public class MyRedisSaver implements BaseCheckpointSaver {
                 dbChatLog.setContent(checkpoints);
                 dbChatLog.setUpdateTime(LocalDateTime.now());
                 chatSaverService.updateById(dbChatLog);
-            }
-            // 不存在 则进行插入 需要插入2张表
-            dbChatLog = new ChatLog();
-            dbChatLog.setConversationId(conversationId);
-            dbChatLog.setContent(checkpoints);
-            dbChatLog.setCreateTime(LocalDateTime.now());
-            dbChatLog.setUpdateTime(LocalDateTime.now());
-            chatSaverService.save(dbChatLog);
+            } else {
+                // 不存在 则进行插入 需要插入2张表
+                dbChatLog = new ChatLog();
+                dbChatLog.setConversationId(conversationId);
+                dbChatLog.setContent(checkpoints);
+                dbChatLog.setCreateTime(LocalDateTime.now());
+                dbChatLog.setUpdateTime(LocalDateTime.now());
+                chatSaverService.save(dbChatLog);
 
-            UserConversation userConversation = UserConversation.builder()
-                    .conversationId(conversationId)
-                    .userId(Long.valueOf(userId))
-                    .build();
-            userConversationService.save(userConversation);
+                UserConversation userConversation = UserConversation.builder()
+                        .conversationId(conversationId)
+                        .userId(Long.valueOf(userId))
+                        .build();
+                userConversationService.save(userConversation);
+            }
 
             // 删除redis中的数据
             bucket.delete();
@@ -338,10 +352,14 @@ public class MyRedisSaver implements BaseCheckpointSaver {
 
             // 获取conversationId对应的RBucket
             RBucket<String> bucket = redisson.getBucket(CHECKPOINT_PREFIX + conversationId);
-            bucket.set(serializeCheckpoints(checkpoints));
+            bucket.set(serializeCheckpoints(checkpoints), Duration.ofSeconds(TTL_SECONDS_BACKUP));
             // 获取conversationId对应的RMap
             RMap<String, String> map = redisson.getMap(CONVERSATION_CONFIG_PREFIX + conversationId);
             map.put(USER_ID, userId.toString());
+            map.expire(Duration.ofSeconds(TTL_SECONDS_BACKUP));
+
+            // 添加到过期处理延迟队列中
+            chatExpirationService.post(conversationId);
 
         } catch (Exception e) {
             throw new RuntimeException(e);
