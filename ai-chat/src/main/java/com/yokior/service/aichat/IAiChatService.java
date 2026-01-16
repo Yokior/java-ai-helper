@@ -17,5 +17,4 @@ public interface IAiChatService {
 
     AssistantMessage agentTest(String userQuery) throws GraphRunnerException;
 
-    Optional<NodeOutput> agentTestHuman(String userQuery) throws GraphRunnerException;
 }

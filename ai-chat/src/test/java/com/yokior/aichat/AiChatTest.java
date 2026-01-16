@@ -1,15 +1,18 @@
 package com.yokior.aichat;
 
 import com.alibaba.cloud.ai.graph.NodeOutput;
+import com.alibaba.cloud.ai.graph.OverAllState;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.action.InterruptionMetadata;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.agent.hook.hip.HumanInTheLoopHook;
+import com.alibaba.cloud.ai.graph.checkpoint.Checkpoint;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import com.yokior.AiChatStarter;
 import com.yokior.hook.ChatLogHook;
+import com.yokior.hook.MySummarizationHook;
 import com.yokior.saver.MyRedisSaver;
 import com.yokior.service.aichat.IAiChatService;
 import com.yokior.tool.DateTimeTools;
@@ -20,6 +23,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -43,6 +47,10 @@ public class AiChatTest {
     @Autowired
     private ChatModel chatModel;
 
+    @Autowired
+    private MySummarizationHook mySummarizationHook;
+
+
     @Test
     void test() {
         String res = aiChatService.test("怎么创建团队？");
@@ -57,9 +65,37 @@ public class AiChatTest {
 
     @Test
     void listCheckpoint() {
-        String threadId = "test-thread";
-        log.info("{}", JSONObject.toJSONString(myRedisSaver.list(RunnableConfig.builder().threadId(threadId).build())));
+        String threadId = "test-conversation-id-003";
+        Collection<Checkpoint> list = myRedisSaver.list(RunnableConfig.builder().threadId(threadId).build());
+        log.info("长度：{}", list.size());
+
+        log.info("{}", JSONObject.toJSONString(list, JSONWriter.Feature.PrettyFormat));
     }
+
+    @Test
+    void testSummarizeText() throws GraphRunnerException {
+
+        String userQuery = "始祖巨人有什么能力";
+
+        ReactAgent agent = ReactAgent.builder()
+                .name("助手")
+                .systemPrompt("你是一个乐于助人的助手")
+                .model(chatModel)
+                .methodTools(new DateTimeTools())
+//                .interceptors(new ChatLogInterceptor()) // 记录完整API调用
+                .hooks(new ChatLogHook()) // 记录聊天记录
+                .saver(myRedisSaver)
+                .hooks(mySummarizationHook) // 总结聊天记录
+                .build();
+
+        RunnableConfig config = RunnableConfig.builder()
+                .threadId("test-conversation-id-003")
+                .addMetadata("userId", "666666")
+                .build();
+
+        agent.call(userQuery, config);
+    }
+
 
     @Test
     void testHumanInTheLoop() throws GraphRunnerException {

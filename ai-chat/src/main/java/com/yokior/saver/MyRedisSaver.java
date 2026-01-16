@@ -44,7 +44,7 @@ public class MyRedisSaver implements BaseCheckpointSaver {
 
 
     // 默认TTL 不在set中使用 详情见 com.yokior.service.chatexpiration.ChatExpirationService
-    public static final long TTL_SECONDS = 60;
+    public static final long TTL_SECONDS = 60 * 60 * 2;
 
     // 兜底用的TTL 默认时间是上述的2倍
     private static final long TTL_SECONDS_BACKUP = TimeUnit.SECONDS.toSeconds(TTL_SECONDS * 2);

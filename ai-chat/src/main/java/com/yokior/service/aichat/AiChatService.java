@@ -6,6 +6,7 @@ import com.alibaba.cloud.ai.graph.NodeOutput;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.agent.hook.hip.HumanInTheLoopHook;
+import com.alibaba.cloud.ai.graph.agent.hook.summarization.SummarizationHook;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.postgresql.PostgresSaver;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.redis.RedisSaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
@@ -102,9 +103,6 @@ public class AiChatService implements IAiChatService {
                 .database("my_test_database")
                 .build();
 
-        RedisSaver redisSaver = RedisSaver.builder()
-                .redisson(redissonClient)
-                .build();
 
         ReactAgent agent = ReactAgent.builder()
                 .name("助手")
@@ -125,30 +123,4 @@ public class AiChatService implements IAiChatService {
         return agent.call(userQuery, config);
     }
 
-    @Override
-    public Optional<NodeOutput> agentTestHuman(String userQuery) throws GraphRunnerException {
-
-        HumanInTheLoopHook humanInTheLoopHook = HumanInTheLoopHook.builder()
-                .approvalOn("getCurrentDateTime", "需要手动确定getCurrentDateTime调用")
-                .build();
-
-
-        ReactAgent agent = ReactAgent.builder()
-                .name("助手")
-                .systemPrompt("你是一个助手")
-                .model(chatModel)
-                .methodTools(new DateTimeTools())
-//                .interceptors(new ChatLogInterceptor()) // 记录完整API调用
-                .hooks(humanInTheLoopHook)
-                .hooks(new ChatLogHook()) // 记录聊天记录
-                .saver(myRedisSaver)
-                .build();
-
-        RunnableConfig config = RunnableConfig.builder()
-                .threadId("test-conversation-id-002")
-                .addMetadata("userId", "666666")
-                .build();
-
-        return agent.invokeAndGetOutput(userQuery, config);
-    }
 }
