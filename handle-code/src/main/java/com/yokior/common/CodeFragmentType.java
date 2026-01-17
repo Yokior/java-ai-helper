@@ -62,6 +62,12 @@ public enum CodeFragmentType {
      */
     ENUM_CONSTANT_DETAIL("ENUM_CONSTANT_DETAIL", "枚举常量详情");
 
+    public static final String ALL_TYPE_VALUES =
+            "CLASS_OVERVIEW, METHOD_DETAIL, INTERFACE_DEFINITION, " +
+                    "DEFAULT_METHOD, STATIC_METHOD, ABSTRACT_CLASS_META, " +
+                    "CONCRETE_MEMBERS, ABSTRACT_METHOD_DETAIL, ENUM_DEFINITION, " +
+                    "ENUM_MEMBERS, ENUM_CONSTANT_DETAIL";
+
     private final String code;
     private final String description;
 
@@ -90,8 +96,19 @@ public enum CodeFragmentType {
         throw new IllegalArgumentException("Unknown code: " + code);
     }
 
+
     @Override
     public String toString() {
         return code;
+    }
+
+    public static String getAllCodeString() {
+        StringBuilder sb = new StringBuilder();
+        for (CodeFragmentType type : CodeFragmentType.values()) {
+            sb.append(type.code).append(",");
+        }
+        // 去掉最后一个符号
+        sb.deleteCharAt(sb.length() - 1);
+        return sb.toString();
     }
 }

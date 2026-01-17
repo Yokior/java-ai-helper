@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 public class MySummarizationHook extends MessagesModelHook {
 
     // 最大消息长度
-    private static final int MAX_MSG_LENGTH = 7;
+    private static final int MAX_MSG_LENGTH = 20;
 
     // 保存最近消息数量 不能大于最大消息长度
     private static final int SAVE_MSG_LENGTH = 5;
@@ -53,7 +53,7 @@ public class MySummarizationHook extends MessagesModelHook {
             1. **零废话原则**：直接切入核心议题，严禁使用“对话提到”、“总结如下”、“记录显示”等元引导词。
             2. **内容降噪**：完全忽略寒暄、客套及与核心议题无关的噪音信息。
             3. **客观中立**：剔除主观情绪色彩，仅保留事实性描述、关键立场及逻辑推演。
-            4. **字数控制**：严格控制在200-300字之间。
+            4. **字数控制**：严格控制在2000字以内。
             5. **结构化输出**：按“背景与核心议题 -> 关键冲突与论证逻辑 -> 最终结论/共识”的线性逻辑推进。
                                     
             # Workflow

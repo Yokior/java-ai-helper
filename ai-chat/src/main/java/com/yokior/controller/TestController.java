@@ -1,6 +1,8 @@
 package com.yokior.controller;
 
+import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.yokior.saver.MyRedisSaver;
+import com.yokior.service.aichat.IAiChatService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,6 +19,9 @@ public class TestController {
     @Autowired
     private MyRedisSaver myRedisSaver;
 
+    @Autowired
+    private IAiChatService aiChatService;
+
 
     /**
      * 测试延迟队列
@@ -24,9 +29,15 @@ public class TestController {
     @GetMapping("/testQueue")
     public String testQueue() {
 
-        myRedisSaver.reloadConversation("test-conversation-id-001");
+//        myRedisSaver.reloadConversation("test-conversation-id-001");
 
         return "testQueue";
+    }
+
+
+    @GetMapping("/testAgentOnce")
+    public String testAgentOnce(String userQuery) throws GraphRunnerException {
+        return aiChatService.agentOnce(userQuery);
     }
 
 }

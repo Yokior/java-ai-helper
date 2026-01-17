@@ -11,12 +11,14 @@ import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import com.yokior.AiChatStarter;
+import com.yokior.common.FilterExpression;
 import com.yokior.hook.ChatLogHook;
 import com.yokior.hook.MySummarizationHook;
 import com.yokior.saver.MyRedisSaver;
 import com.yokior.service.aichat.IAiChatService;
 import com.yokior.tool.DateTimeTools;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -190,5 +192,29 @@ public class AiChatTest {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Test
+    void testFlux() {
+        chatModel.stream("进击的巨人一共有几大势力")
+                .doOnNext(System.out::print)
+                .blockLast();
+    }
+
+
+    @Test
+    void testExpr() {
+        String a = null;
+        String b = "2";
+        String c = null;
+        FilterExpression expression = FilterExpression.builder()
+                .gt(StringUtils.isNotBlank(a), "count", a)
+                .or()
+                .eq("class_name", b)
+                .or()
+                .eq(StringUtils.isNotBlank(c), "class_name", c)
+                .build();
+
+        log.info("{}", expression.getExpression());
     }
 }
