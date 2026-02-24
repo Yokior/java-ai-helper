@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * @author Yokior
@@ -38,6 +39,11 @@ public class TestController {
     @GetMapping("/testAgentOnce")
     public String testAgentOnce(String userQuery) throws GraphRunnerException {
         return aiChatService.agentOnce(userQuery);
+    }
+
+    @GetMapping(value = "/testAgentOnceStream", produces = "text/event-stream")
+    public SseEmitter testAgentOnceStream(String userQuery) throws GraphRunnerException {
+        return aiChatService.agentOnceStream(userQuery);
     }
 
 }

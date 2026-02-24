@@ -2,6 +2,7 @@ package com.yokior.service.aichat;
 
 
 import com.alibaba.cloud.ai.graph.NodeOutput;
+import com.alibaba.cloud.ai.graph.OverAllState;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.agent.hook.hip.HumanInTheLoopHook;
@@ -9,8 +10,11 @@ import com.alibaba.cloud.ai.graph.agent.hook.summarization.SummarizationHook;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.postgresql.PostgresSaver;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.redis.RedisSaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
+import com.alibaba.cloud.ai.graph.streaming.OutputType;
+import com.alibaba.cloud.ai.graph.streaming.StreamingOutput;
 import com.yokior.advisor.ChatLogAdvisor;
 import com.yokior.common.EmbedSearchResult;
+import com.yokior.entity.ChatStreamResponse;
 import com.yokior.hook.ChatLogHook;
 import com.yokior.saver.MyRedisSaver;
 import com.yokior.service.embedding.IEmbeddingService;
@@ -18,6 +22,8 @@ import com.yokior.service.milvus.IMilvusService;
 import com.yokior.tool.DateTimeTools;
 import com.yokior.tool.MilvusSearchTool;
 import com.yokior.tool.SearchTool;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonClient;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -25,7 +31,10 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.function.FunctionToolCallback;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.publisher.Flux;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,6 +44,7 @@ import java.util.Optional;
  * @date 2026/1/10 22:40
  */
 @Service
+@Slf4j
 public class AiChatService implements IAiChatService {
 
     private ChatClient chatClient;
@@ -54,6 +64,8 @@ public class AiChatService implements IAiChatService {
     @Autowired
     private MilvusSearchTool milvusSearchTool;
 
+
+    private static final String AI_NAME = "Java 项目专属技术助手";
 
     private static final String SYSTEM_PROMPT = """
             # Java 项目专属技术助手行为规范
@@ -211,7 +223,7 @@ public class AiChatService implements IAiChatService {
     @Override
     public String agentOnce(String userQuery) throws GraphRunnerException {
         ReactAgent agent = ReactAgent.builder()
-                .name("Java 项目专属技术助手")
+                .name(AI_NAME)
                 .systemPrompt(SYSTEM_PROMPT)
                 .model(chatModel)
                 .methodTools(milvusSearchTool)
@@ -219,6 +231,79 @@ public class AiChatService implements IAiChatService {
                 .build();
 
         return agent.call(userQuery).getText();
+    }
+
+    @Override
+    public SseEmitter agentOnceStream(String userQuery) throws GraphRunnerException {
+
+        SseEmitter sseEmitter = new SseEmitter();
+
+        ReactAgent agent = ReactAgent.builder()
+                .name(AI_NAME)
+                .systemPrompt(SYSTEM_PROMPT)
+                .model(chatModel)
+                .methodTools(milvusSearchTool)
+                .hooks(new ChatLogHook())
+                .build();
+
+        Flux<NodeOutput> stream = agent.stream(userQuery);
+
+        stream.subscribe(
+                output -> {
+                    // 检查是否为 StreamingOutput 类型
+                    if (output instanceof StreamingOutput streamingOutput) {
+                        OutputType type = streamingOutput.getOutputType();
+
+                        // 处理模型推理的流式输出
+                        if (type == OutputType.AGENT_MODEL_STREAMING) {
+                            String text = streamingOutput.message().getText();
+                            // 流式增量内容，逐步显示
+                            if (StringUtils.isNotBlank(text)) {
+                                sendStream(sseEmitter, text);
+                            }
+
+                        } else if (type == OutputType.AGENT_MODEL_FINISHED) {
+                            // 模型推理完成，可获取完整响应
+                            log.info("\n模型输出完成");
+                        }
+
+                        // 处理工具调用完成（目前不支持 STREAMING）
+                        if (type == OutputType.AGENT_TOOL_FINISHED) {
+                            log.info("工具调用完成: " + output.node());
+                        }
+
+                        // 对于 Hook 节点，通常只关注完成事件（如果Hook没有有效输出可以忽略）
+                        if (type == OutputType.AGENT_HOOK_FINISHED) {
+                            log.info("Hook 执行完成: " + output.node());
+                        }
+                    }
+                },
+                error -> log.error("错误: " + error),
+                () -> {
+                    sseEmitter.complete();
+                }
+        );
+
+        return sseEmitter;
+    }
+
+
+    /**
+     * 发送流式数据
+     *
+     * @param sseEmitter
+     * @param text
+     */
+    private void sendStream(SseEmitter sseEmitter, String text) {
+        try {
+            ChatStreamResponse response = ChatStreamResponse.builder()
+                    .content(text)
+                    .build();
+
+            sseEmitter.send(SseEmitter.event().data(response));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 }

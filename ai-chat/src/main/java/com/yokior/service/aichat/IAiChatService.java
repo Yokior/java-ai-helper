@@ -3,6 +3,7 @@ package com.yokior.service.aichat;
 import com.alibaba.cloud.ai.graph.NodeOutput;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.Optional;
 
@@ -45,5 +46,13 @@ public interface IAiChatService {
      * @return
      */
     String agentOnce(String userQuery) throws GraphRunnerException;
+
+    /**
+     * 一次性agent stream流式 无记忆
+     *
+     * @param userQuery
+     * @return
+     */
+    SseEmitter agentOnceStream(String userQuery) throws GraphRunnerException;
 
 }
